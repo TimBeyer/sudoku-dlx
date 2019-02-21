@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+
+const { solveString, printBoard } = require('../built/lib/index')
+const sudoku = process.argv[2]
+
+console.log(printBoard(solveString(sudoku)[0]))

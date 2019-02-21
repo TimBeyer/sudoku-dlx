@@ -1,0 +1,86 @@
+{
+  "name": "sudoku-dlx",
+  "version": "1.0.0",
+  "description": "Sudoku solver using Dancing Links",
+  "author": "Tim Beyer",
+  "license": "MIT",
+  "homepage": "https://github.com/TimBeyer/sudoku-dlx",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TimBeyer/sudoku-dlx.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TimBeyer/sudoku-dlx/issues"
+  },
+  "bin": {
+    "sudoku-solve": "bin/sudoku-solve"
+  },
+  "main": "built/lib/index.js",
+  "types": "built/typings/index.d.ts",
+  "directories": {
+    "test": "test"
+  },
+  "keywords": [
+    "sudoku",
+    "sudoku solver",
+    "dlx",
+    "dancing links"
+  ],
+  "scripts": {
+    "clean": "rimraf built",
+    "build": "npm run clean && tsc -p tsconfig.release.json",
+    "build-dev": "npm run clean && tsc -p tsconfig.dev.json",
+    "prepare": "npm run build",
+    "test": "npm run test-unit",
+    "test-watch": "npm run test-unit -- --watch",
+    "test-unit": "NODE_ENV=test mocha --require ts-node/register 'test/unit/**/*.spec.ts'",
+    "cover": "nyc npm run test-unit",
+    "coverage": "npm run cover && nyc report --reporter=text-lcov > coverage.lcov",
+    "coverage-report": "npm run coverage && codecov && rm -rf ./nyc_output && rm coverage.lcov",
+    "lint": "tslint --project tsconfig.release.json --config tslint.json",
+    "benchmark": "npm run build-dev && node built/lib/benchmark/index.js",
+    "profile": "npm run build-dev && node built/lib/benchmark/profile.js"
+  },
+  "nyc": {
+    "per-file": true,
+    "include": [
+      "index.ts",
+      "lib/**/*.ts"
+    ],
+    "exclude": [
+      "test/**/*.spec.ts",
+      "test/**/*.ts",
+      "node_modules/**/*"
+    ],
+    "extension": [
+      ".ts"
+    ],
+    "all": true,
+    "sourceMap": true
+  },
+  "dependencies": {
+    "dancing-links": "^2.1.1"
+  },
+  "devDependencies": {
+    "@mattflow/sudoku-solver": "^2.1.3",
+    "@types/benchmark": "^1.0.31",
+    "@types/chai": "^4.0.4",
+    "@types/mocha": "^2.2.44",
+    "@types/node": "^10.12.18",
+    "benchmark": "^2.1.4",
+    "chai": "^4.2.0",
+    "codecov": "^3.1.0",
+    "dancing-links-algorithm": "^1.0.1",
+    "klsudoku": "^1.3.5",
+    "mocha": "^5.0.0",
+    "nyc": "^13.1.0",
+    "rimraf": "^2.6.2",
+    "sudoku-c": "^1.0.0",
+    "sudoku-solver-js": "^0.1.4",
+    "sudoku_solver": "^1.0.1",
+    "ts-node": "^3.3.0",
+    "tslint": "^5.12.1",
+    "tslint-config-standard": "^8.0.1",
+    "typescript": "^3.2.4"
+  }
+}
