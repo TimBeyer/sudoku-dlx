@@ -13,7 +13,7 @@ import { solveString, printBoard } from 'sudoku-dlx'
 
 const result = solveString('.....12..1..7...45...43.7...9...63...5.8.7.2...62...9...3.19...97...4..6..25.....')
 
-// If multiple solutions exist, you can pass `true` as the second parameter to `solveString`
+// If multiple solutions exist, you can pass `true` as the second parameter to `solveString` in order to enumerate them all.
 // The return value will always be an array of solutions, even if only one was found
 console.log(printBoard(result[0]))
 
