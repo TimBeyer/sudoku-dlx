@@ -1,7 +1,7 @@
 {
   "name": "sudoku-dlx",
   "version": "1.0.0",
-  "description": "Sudoku solver using Dancing Links",
+  "description": "Fast sudoku solver using Dancing Links",
   "author": "Tim Beyer",
   "license": "MIT",
   "homepage": "https://github.com/TimBeyer/sudoku-dlx",
