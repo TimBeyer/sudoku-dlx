@@ -1,23 +1,8 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "./built/lib",
-    "allowJs": true,
-    "target": "es2017",
-    "module": "commonjs",
-    "lib": [
-      "es2015",
-      "es2016",
-      "es2017",
-      "esnext"
-    ],
-    "sourceMap": true,
-    "moduleResolution": "node",
-    "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "outDir": "./built"
   },
-  "include": [
-    "./index.ts",
-    "./src/**/*",
-    "./benchmark/**/*"
-  ]
+  "include": ["./index.ts", "./lib/**/*", "./test/**/*", "./benchmark/**/*"],
+  "exclude": ["node_modules", "built"]
 }
