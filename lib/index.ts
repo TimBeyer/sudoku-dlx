@@ -1,9 +1,12 @@
-import { Row } from 'dancing-links'
-
 export interface SudokuCell {
   number: number
   row: number
   col: number
+}
+
+export interface SudokuConstraint {
+  coveredColumns: number[]
+  data: SudokuCell
 }
 
 export function times<T> (n: number, fn: ((index: number) => T) | T): T[] {
@@ -16,11 +19,11 @@ export function times<T> (n: number, fn: ((index: number) => T) | T): T[] {
   return returnValue
 }
 
-export function generateConstraints (inputs: SudokuCell[] = [], size = 9): Row<SudokuCell>[] {
+export function generateConstraints (inputs: SudokuCell[] = [], size = 9): SudokuConstraint[] {
   const blockSize = Math.sqrt(size)
   const constraintBlockSize = size * size
 
-  const constraints: Row<SudokuCell>[] = []
+  const constraints: SudokuConstraint[] = []
 
   const inputsByCoords = new Map()
 

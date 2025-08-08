@@ -17,78 +17,95 @@ import SudokuSolverJs from "sudoku-solver-js";
 const SHOW_PROGRESS =
   process.env["SHOW_PROGRESS"] && process.env["SHOW_PROGRESS"] !== "0";
 
-function runBenchmark(name: string, sudokuString: string) {
-  const GRID_SIZE = 9;
-  const sudokuStringWithZeros = sudokuString.replace(/\./g, "0");
-  const cells = parseStringFormat(sudokuString);
-  const sudokuSolverJsSolver = new SudokuSolverJs();
-
-  const simpleArrayCells = times(GRID_SIZE * GRID_SIZE, 0);
-  for (const cell of cells) {
-    const index = cell.row * GRID_SIZE + cell.col;
-    simpleArrayCells[index] = cell.number;
-  }
-
-  console.log(`Benchmark: ${name} \n`);
-  console.log(printBoard(cells));
-  console.log("\n");
-
-  const suite = new Benchmark.Suite();
-
-  suite
-    .add("sudoku-dlx from string (JS)", function () {
-      solveString(sudokuString);
-    })
-    .add("sudoku-dlx from cells (JS)", function () {
-      solveCells(cells);
-    })
-    .add("klsudoku from string (C++)", function () {
-      klsudoku.solve(sudokuString);
-    })
-    .add("dancing-links-algorithm from string (JS)", function () {
-      dancingLinksAlgoritm.solve(sudokuStringWithZeros);
-    })
-    // .add("@mattflow/sudoku-solver from string (JS)", function () {
-    //   sudokuSolver(sudokuStringWithZeros);
-    // })
-    .add("sudoku-solver-js from string (JS)", function () {
-      sudokuSolverJsSolver.solve(sudokuString);
-    })
-    .add("sudoku_solver from string (JS)", function () {
-      let grid = new sudoku_solver.Grid(sudokuString);
-      // Creates a Solver
-      let solver = new sudoku_solver.Solver();
-      solver.solve(grid);
-    })
-
-    .on("cycle", function (event) {
-      if (SHOW_PROGRESS) {
-        console.log(String(event.target));
-      }
-    })
-    .on("complete", function () {
-      const results = this.map((res) => {
-        return res;
-      })
-        .sort((a, b) => {
-          return b.hz - a.hz;
-        })
-        .map((r) => String(r))
-        .join("\n");
-
-      console.log(results);
-      console.log(
-        "\nFastest is " + this.filter("fastest").map("name") + "\n\n"
-      );
-    })
-    .run();
+interface SudokuTestCase {
+  name: string
+  puzzle: string
+  description?: string
 }
 
-runBenchmark(
-  "A solution to the sudoku (simple)",
-  ".....12..1..7...45...43.7...9...63...5.8.7.2...62...9...3.19...97...4..6..25....."
-);
-runBenchmark(
-  "A solution to the sudoku (hard)",
-  "..............3.85..1.2.......5.7.....4...1...9.......5......73..2.1........4...9"
-);
+const TEST_CASES: SudokuTestCase[] = [
+  {
+    name: "simple",
+    puzzle: ".....12..1..7...45...43.7...9...63...5.8.7.2...62...9...3.19...97...4..6..25.....",
+    description: "A solution to the sudoku (simple)"
+  },
+  {
+    name: "hard", 
+    puzzle: "..............3.85..1.2.......5.7.....4...1...9.......5......73..2.1........4...9",
+    description: "A solution to the sudoku (hard)"
+  }
+]
+
+function createSolver(name: string, puzzle: string) {
+  const GRID_SIZE = 9
+  const sudokuStringWithZeros = puzzle.replace(/\./g, "0")
+  const cells = parseStringFormat(puzzle)
+  const sudokuSolverJsSolver = new SudokuSolverJs()
+
+  const solvers = {
+    "sudoku-dlx from string (JS)": () => solveString(puzzle),
+    "sudoku-dlx from cells (JS)": () => solveCells(cells), 
+    "klsudoku from string (C++)": () => klsudoku.solve(puzzle),
+    "dancing-links-algorithm from string (JS)": () => dancingLinksAlgoritm.solve(sudokuStringWithZeros),
+    "sudoku-solver-js from string (JS)": () => sudokuSolverJsSolver.solve(puzzle),
+    "sudoku_solver from string (JS)": () => {
+      const grid = new sudoku_solver.Grid(puzzle)
+      const solver = new sudoku_solver.Solver()
+      solver.solve(grid)
+    }
+  }
+
+  return solvers
+}
+
+function runBenchmark(testCase: SudokuTestCase) {
+  const { name, puzzle, description } = testCase
+  const cells = parseStringFormat(puzzle)
+  const solvers = createSolver(name, puzzle)
+
+  console.log(`Benchmark: ${description || name} \n`)
+  console.log(printBoard(cells))
+  console.log("\n")
+
+  const suite = new Benchmark.Suite()
+
+  // Add all solvers to the benchmark suite
+  Object.entries(solvers).forEach(([solverName, solverFn]) => {
+    suite.add(solverName, solverFn)
+  })
+
+  suite
+    .on("cycle", (event: any) => {
+      if (SHOW_PROGRESS) {
+        console.log(String(event.target))
+      }
+    })
+    .on("complete", function() {
+      const results = Array.from(this)
+        .sort((a: any, b: any) => b.hz - a.hz)
+        .map((r: any) => String(r))
+        .join("\n")
+
+      console.log(results)
+      console.log(
+        "\nFastest is " + this.filter("fastest").map("name") + "\n\n"
+      )
+    })
+    .run()
+}
+
+function main() {
+  console.log("Running Sudoku Solver Benchmarks\n")
+  console.log(`Node.js version: ${process.version}`)
+  console.log(`Platform: ${process.platform} ${process.arch}`)
+  console.log(`Show progress: ${SHOW_PROGRESS ? 'enabled' : 'disabled'}\n`)
+
+  // Run all test cases
+  for (const testCase of TEST_CASES) {
+    runBenchmark(testCase)
+  }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main()
+}
