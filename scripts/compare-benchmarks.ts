@@ -43,20 +43,22 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
     if (baselineData.length === 0) {
       console.log('⚠️ No baseline data found. Showing PR results only:')
       console.log()
-      
+
       for (const testCase of prData) {
         console.log(`**${testCase.benchmarkName}**`)
         console.log()
         console.log('| Solver | Ops/sec | Margin of Error |')
         console.log('|--------|---------|-----------------|')
-        
+
         // Find fastest solver
         const fastestOpsPerSec = Math.max(...testCase.results.map(r => r.opsPerSec))
-        
+
         for (const result of testCase.results) {
           const isFastest = Math.abs(result.opsPerSec - fastestOpsPerSec) < 0.1
           const name = isFastest ? `**${result.name}** 🏆` : result.name
-          console.log(`| ${name} | ${formatNumber(result.opsPerSec)} | ±${result.margin.toFixed(2)}% |`)
+          console.log(
+            `| ${name} | ${formatNumber(result.opsPerSec)} | ±${result.margin.toFixed(2)}% |`
+          )
         }
         console.log()
       }
@@ -74,7 +76,7 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
     // Compare each test case
     for (const prTestCase of prData) {
       const baselineTestCase = baselineData.find(b => b.benchmarkName === prTestCase.benchmarkName)
-      
+
       console.log(`**${prTestCase.benchmarkName}**`)
       console.log()
 
@@ -83,14 +85,16 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
         console.log()
         console.log('| Solver | Ops/sec | Margin of Error |')
         console.log('|--------|---------|-----------------|')
-        
+
         // Find fastest solver
         const fastestOpsPerSec = Math.max(...prTestCase.results.map(r => r.opsPerSec))
-        
+
         for (const result of prTestCase.results) {
           const isFastest = Math.abs(result.opsPerSec - fastestOpsPerSec) < 0.1
           const name = isFastest ? `**${result.name}** 🏆` : result.name
-          console.log(`| ${name} | ${formatNumber(result.opsPerSec)} | ±${result.margin.toFixed(2)}% |`)
+          console.log(
+            `| ${name} | ${formatNumber(result.opsPerSec)} | ±${result.margin.toFixed(2)}% |`
+          )
         }
         console.log()
         continue
@@ -102,28 +106,35 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
 
       // Find fastest in each set
       const fastestPrOpsPerSec = Math.max(...prTestCase.results.map(r => r.opsPerSec))
-      
+
       for (const prResult of prTestCase.results) {
         const baselineResult = baselineTestCase.results.find(b => b.name === prResult.name)
-        
+
         if (!baselineResult) {
-          console.log(`| ${prResult.name} | - | ${formatNumber(prResult.opsPerSec)} ops/sec | New | 🆕 |`)
+          console.log(
+            `| ${prResult.name} | - | ${formatNumber(prResult.opsPerSec)} ops/sec | New | 🆕 |`
+          )
           continue
         }
 
-        const change = ((prResult.opsPerSec - baselineResult.opsPerSec) / baselineResult.opsPerSec) * 100
+        const change =
+          ((prResult.opsPerSec - baselineResult.opsPerSec) / baselineResult.opsPerSec) * 100
         const emoji = getPerformanceEmoji(change)
         const isFastest = Math.abs(prResult.opsPerSec - fastestPrOpsPerSec) < 0.1
         const name = isFastest ? `**${prResult.name}** 🏆` : prResult.name
 
-        console.log(`| ${name} | ${formatNumber(baselineResult.opsPerSec)} | ${formatNumber(prResult.opsPerSec)} | ${formatPercentage(change)} | ${emoji} |`)
+        console.log(
+          `| ${name} | ${formatNumber(baselineResult.opsPerSec)} | ${formatNumber(prResult.opsPerSec)} | ${formatPercentage(change)} | ${emoji} |`
+        )
       }
 
       // Check for removed solvers
       for (const baselineResult of baselineTestCase.results) {
         const prResult = prTestCase.results.find(p => p.name === baselineResult.name)
         if (!prResult) {
-          console.log(`| ${baselineResult.name} | ${formatNumber(baselineResult.opsPerSec)} ops/sec | - | Removed | ❌ |`)
+          console.log(
+            `| ${baselineResult.name} | ${formatNumber(baselineResult.opsPerSec)} ops/sec | - | Removed | ❌ |`
+          )
         }
       }
 
@@ -147,7 +158,8 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
         const baselineResult = baselineTestCase.results.find(b => b.name === prResult.name)
         if (!baselineResult) continue
 
-        const change = ((prResult.opsPerSec - baselineResult.opsPerSec) / baselineResult.opsPerSec) * 100
+        const change =
+          ((prResult.opsPerSec - baselineResult.opsPerSec) / baselineResult.opsPerSec) * 100
         totalComparisons++
         totalChangeSum += change
 
@@ -162,7 +174,7 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
       console.log(`- **Improvements**: ${improvements} (>${2}% faster)`)
       console.log(`- **Regressions**: ${regressions} (>${2}% slower)`)
       console.log(`- **Average change**: ${formatPercentage(avgChange)}`)
-      
+
       if (avgChange > 5) {
         console.log(`- **Overall**: 🚀 Significant performance improvement`)
       } else if (avgChange > 2) {
@@ -175,7 +187,6 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
         console.log(`- **Overall**: 🐌 Performance regression`)
       }
     }
-
   } catch (error) {
     console.error('Error comparing benchmarks:', error)
     process.exit(1)

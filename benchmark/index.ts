@@ -52,7 +52,6 @@ function createSolver(puzzle: string) {
   return solvers
 }
 
-
 // Parse command line arguments
 const args = process.argv.slice(2)
 const isJsonMode = args.includes('--json')
@@ -72,7 +71,7 @@ interface BenchmarkResult {
 const benchmarkResults: BenchmarkResult[] = []
 
 function runBenchmark(testCase: SudokuTestCase, isJsonMode = false): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const { description } = testCase
     const cells = parseStringFormat(testCase.puzzle)
     const solvers = createSolver(testCase.puzzle)
