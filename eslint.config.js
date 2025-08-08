@@ -58,6 +58,29 @@ export default [
     }
   },
   {
+    files: ['scripts/**/*.ts'],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: './tsconfig.dev.json'
+      },
+      globals: {
+        process: 'readonly',
+        console: 'readonly'
+      }
+    },
+    plugins: {
+      '@typescript-eslint': tseslint
+    },
+    rules: {
+      ...tseslint.configs.recommended.rules,
+      '@typescript-eslint/no-unused-vars': 'error',
+      '@typescript-eslint/no-explicit-any': 'off' // Allow any for generic library
+    }
+  },
+  {
     ignores: ['built/**', 'node_modules/**', 'benchmark/**']
   }
 ]
