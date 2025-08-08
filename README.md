@@ -8,10 +8,13 @@ It is [one of the fastest](#benchmarks) sudoku solver implementations in plain J
 ## Usage
 
 ### As a library
+
 ```ts
 import { solveString, printBoard } from 'sudoku-dlx'
 
-const result = solveString('.....12..1..7...45...43.7...9...63...5.8.7.2...62...9...3.19...97...4..6..25.....')
+const result = solveString(
+  '.....12..1..7...45...43.7...9...63...5.8.7.2...62...9...3.19...97...4..6..25.....'
+)
 
 // If multiple solutions exist, you can pass `true` as the second parameter to `solveString` in order to enumerate them all.
 // The return value will always be an array of solutions, even if only one was found
@@ -30,12 +33,12 @@ console.log(printBoard(result[0]))
 // │971│324│856│
 // │462│578│139│
 // ╰───┴───┴───╯
-
 ```
 
 ### As an executable
 
 #### Using npx
+
 ```shell
 $ npx -p sudoku-dlx sudoku-solve .....12..1..7...45...43.7...9...63...5.8.7.2...62...9...3.19...97...4..6..25.....
 npx: installed 2 in 0.903s
@@ -55,6 +58,7 @@ npx: installed 2 in 0.903s
 ```
 
 #### Global install
+
 ```shell
 $ npm install -g sudoku-dlx
 $ sudoku-solve ..............3.85..1.2.......5.7.....4...1...9.......5......73..2.1........4...9

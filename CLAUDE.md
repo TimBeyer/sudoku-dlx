@@ -9,7 +9,7 @@ This is a high-performance sudoku solver using the [dancing-links](https://githu
 ## Development Commands
 
 - `npm run build` - Build TypeScript to JavaScript for production (uses tsconfig.release.json)
-- `npm run build-dev` - Build for development (uses tsconfig.dev.json) 
+- `npm run build-dev` - Build for development (uses tsconfig.dev.json)
 - `npm run test` - Run unit tests (alias for test-unit)
 - `npm run test-watch` - Run tests in watch mode
 - `npm run test-unit` - Run unit tests with Mocha and ts-node
@@ -31,7 +31,7 @@ This is a high-performance sudoku solver using the [dancing-links](https://githu
 ### Key Functions
 
 - `solveString()` - Solve sudoku from dot-notation string format
-- `solveCells()` - Solve sudoku from SudokuCell array format  
+- `solveCells()` - Solve sudoku from SudokuCell array format
 - `generateConstraints()` - Convert sudoku cells to Dancing Links constraint matrix
 - `parseStringFormat()` - Parse dot-notation strings into SudokuCell arrays
 - `printBoard()` - Format solved sudoku for display with box drawing characters
@@ -42,7 +42,7 @@ The core algorithm in `generateConstraints()` creates exact cover constraints fo
 
 1. **Cell constraints** - Each cell must contain exactly one number
 2. **Row constraints** - Each number appears exactly once per row
-3. **Column constraints** - Each number appears exactly once per column  
+3. **Column constraints** - Each number appears exactly once per column
 4. **Block constraints** - Each number appears exactly once per 3x3 block
 
 Each possible number placement becomes a constraint row covering the appropriate constraint columns.

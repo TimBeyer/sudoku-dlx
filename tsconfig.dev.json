@@ -4,11 +4,6 @@
     "outDir": "./built",
     "declarationDir": "./built/typings"
   },
-  "include": [
-    "./index.ts",
-    "./lib/**/*",
-    "./test/**/*",
-    "./benchmark/**/*"
-  ],
+  "include": ["./index.ts", "./lib/**/*", "./test/**/*", "./benchmark/**/*"],
   "exclude": ["node_modules"]
 }

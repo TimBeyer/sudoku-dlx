@@ -9,7 +9,7 @@ export interface SudokuConstraint {
   data: SudokuCell
 }
 
-export function times<T> (n: number, fn: ((index: number) => T) | T): T[] {
+export function times<T>(n: number, fn: ((index: number) => T) | T): T[] {
   const returnValue: T[] = []
 
   for (let i = 0; i < n; i++) {
@@ -19,7 +19,7 @@ export function times<T> (n: number, fn: ((index: number) => T) | T): T[] {
   return returnValue
 }
 
-export function generateConstraints (inputs: SudokuCell[] = [], size = 9): SudokuConstraint[] {
+export function generateConstraints(inputs: SudokuCell[] = [], size = 9): SudokuConstraint[] {
   const blockSize = Math.sqrt(size)
   const constraintBlockSize = size * size
 
@@ -44,7 +44,7 @@ export function generateConstraints (inputs: SudokuCell[] = [], size = 9): Sudok
           }
         }
 
-        const numberOffset = (currentNumber * size)
+        const numberOffset = currentNumber * size
         const rowColNumber = size * currentRow + currentCol
         const rowColIndex = rowColNumber
 
@@ -56,7 +56,11 @@ export function generateConstraints (inputs: SudokuCell[] = [], size = 9): Sudok
 
         const blockNumber = blockSize * blockRow + blockCol
 
-        const blockIndex = constraintBlockSize + constraintBlockSize + constraintBlockSize + (numberOffset + blockNumber)
+        const blockIndex =
+          constraintBlockSize +
+          constraintBlockSize +
+          constraintBlockSize +
+          (numberOffset + blockNumber)
 
         constraints.push({
           coveredColumns: [rowColIndex, rowIndex, colIndex, blockIndex],
@@ -74,41 +78,44 @@ export function generateConstraints (inputs: SudokuCell[] = [], size = 9): Sudok
 }
 
 const boxStyles = {
-  'top': '─',
-  'topLeft': '╭',
-  'topMid': '┬',
-  'topRight': '╮',
-  'bottom': '─',
-  'bottomRight': '╯',
-  'bottomMid': '┴',
-  'bottomLeft': '╰',
-  'left': '│',
-  'leftMid': '├',
-  'mid': '─',
-  'midMid': '┼',
-  'right': '│',
-  'rightMid': '┤',
-  'middle': '│'
+  top: '─',
+  topLeft: '╭',
+  topMid: '┬',
+  topRight: '╮',
+  bottom: '─',
+  bottomRight: '╯',
+  bottomMid: '┴',
+  bottomLeft: '╰',
+  left: '│',
+  leftMid: '├',
+  mid: '─',
+  midMid: '┼',
+  right: '│',
+  rightMid: '┤',
+  middle: '│'
 }
 
-export function printBoard (inputs: SudokuCell[], size = 9): string {
+export function printBoard(inputs: SudokuCell[], size = 9): string {
   const blocks = Math.sqrt(size)
   const rows: string[][] = times(size, () => times(size, '.'))
 
   for (let x = 0; x < size; x++) {
     for (let y = 0; y < size; y++) {
-      const field = inputs.find((input) => input.col === x && input.row === y)
+      const field = inputs.find(input => input.col === x && input.row === y)
       rows[y][x] = String((field && field.number) || '.')
     }
   }
 
-  const topBorder = times(size + (blocks - 1), (i) => i > 0 && (i + 1) % (blocks + 1) === 0 ? boxStyles.topMid : boxStyles.top).join('')
+  const topBorder = times(size + (blocks - 1), i =>
+    i > 0 && (i + 1) % (blocks + 1) === 0 ? boxStyles.topMid : boxStyles.top
+  ).join('')
   let board = `${boxStyles.topLeft}${topBorder}${boxStyles.topRight}\n`
 
   for (let y = 0; y < size; y++) {
-
     if (y > 0 && y % blocks === 0) {
-      const midBorder = times(size + (blocks - 1), (i) => i > 0 && (i + 1) % (blocks + 1) === 0 ? boxStyles.midMid : boxStyles.mid).join('')
+      const midBorder = times(size + (blocks - 1), i =>
+        i > 0 && (i + 1) % (blocks + 1) === 0 ? boxStyles.midMid : boxStyles.mid
+      ).join('')
       board += `${boxStyles.leftMid}${midBorder}${boxStyles.rightMid}\n`
     }
 
@@ -125,13 +132,15 @@ export function printBoard (inputs: SudokuCell[], size = 9): string {
     board += `${boxStyles.right}\n`
   }
 
-  const bottomBorder = times(size + (blocks - 1), (i) => i > 0 && (i + 1) % (blocks + 1) === 0 ? boxStyles.bottomMid : boxStyles.bottom).join('')
+  const bottomBorder = times(size + (blocks - 1), i =>
+    i > 0 && (i + 1) % (blocks + 1) === 0 ? boxStyles.bottomMid : boxStyles.bottom
+  ).join('')
   board += `${boxStyles.bottomLeft}${bottomBorder}${boxStyles.bottomRight}`
 
   return board
 }
 
-export function parseStringFormat (dotFormat: string, size = 9): SudokuCell[] {
+export function parseStringFormat(dotFormat: string, size = 9): SudokuCell[] {
   const inputs: SudokuCell[] = []
 
   for (let row = 0; row < size; row++) {
