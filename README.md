@@ -1,4 +1,4 @@
-# sudoku-dlx [![codecov](https://codecov.io/gh/TimBeyer/sudoku-dlx/branch/master/graph/badge.svg)](https://codecov.io/gh/TimBeyer/sudoku-dlx)
+# sudoku-dlx
 
 ## About
 
