@@ -1,22 +1,14 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "./built/lib",
-    "allowJs": true,
-    "target": "ES2020",
-    "module": "ES2020",
-    "lib": [
-      "ES2020"
-    ],
-    "sourceMap": true,
-    "moduleResolution": "node",
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
+    "outDir": "./built",
+    "declarationDir": "./built/typings"
   },
   "include": [
     "./index.ts",
-    "./src/**/*",
+    "./lib/**/*",
+    "./test/**/*",
     "./benchmark/**/*"
-  ]
+  ],
+  "exclude": ["node_modules"]
 }
