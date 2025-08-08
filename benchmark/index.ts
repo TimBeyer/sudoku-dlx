@@ -1,11 +1,11 @@
 import Benchmark from 'benchmark'
 
 import { solveString, solveCells, parseStringFormat, printBoard } from '../index.js'
-import { times } from '../lib/index.js'
 
+// External sudoku solvers for benchmarking
+// These have no types but are only used for performance comparison
 import klsudoku from 'klsudoku'
 import dancingLinksAlgoritm from 'dancing-links-algorithm'
-// import sudokuSolver from "@mattflow/sudoku-solver";
 import sudoku_solver from 'sudoku_solver'
 import SudokuSolverJs from 'sudoku-solver-js'
 
@@ -30,8 +30,7 @@ const TEST_CASES: SudokuTestCase[] = [
   }
 ]
 
-function createSolver(name: string, puzzle: string) {
-  const GRID_SIZE = 9
+function createSolver(puzzle: string) {
   const sudokuStringWithZeros = puzzle.replace(/\./g, '0')
   const cells = parseStringFormat(puzzle)
   const sudokuSolverJsSolver = new SudokuSolverJs()
@@ -54,11 +53,11 @@ function createSolver(name: string, puzzle: string) {
 }
 
 function runBenchmark(testCase: SudokuTestCase) {
-  const { name, puzzle, description } = testCase
+  const { puzzle, description } = testCase
   const cells = parseStringFormat(puzzle)
-  const solvers = createSolver(name, puzzle)
+  const solvers = createSolver(puzzle)
 
-  console.log(`Benchmark: ${description || name} \n`)
+  console.log(`Benchmark: ${description} \n`)
   console.log(printBoard(cells))
   console.log('\n')
 
@@ -75,7 +74,7 @@ function runBenchmark(testCase: SudokuTestCase) {
         console.log(String(event.target))
       }
     })
-    .on('complete', function () {
+    .on('complete', function (this: any) {
       const results = Array.from(this)
         .sort((a: any, b: any) => b.hz - a.hz)
         .map((r: any) => String(r))
