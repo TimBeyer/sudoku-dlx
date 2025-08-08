@@ -3,17 +3,14 @@
 import { readFileSync } from 'fs'
 
 interface BenchmarkResult {
-  name: string
-  puzzle: string
-  description: string
+  benchmarkName: string
   results: Array<{
     name: string
-    hz: number
-    rme: number
-    samples: number
+    opsPerSec: number
+    margin: number
+    runs: number
+    deprecated: boolean
   }>
-  fastest: string
-  timestamp: string
 }
 
 function formatNumber(num: number): string {
@@ -48,15 +45,18 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
       console.log()
       
       for (const testCase of prData) {
-        console.log(`**${testCase.description}**`)
+        console.log(`**${testCase.benchmarkName}**`)
         console.log()
         console.log('| Solver | Ops/sec | Margin of Error |')
         console.log('|--------|---------|-----------------|')
         
+        // Find fastest solver
+        const fastestOpsPerSec = Math.max(...testCase.results.map(r => r.opsPerSec))
+        
         for (const result of testCase.results) {
-          const isFastest = result.name === testCase.fastest
+          const isFastest = Math.abs(result.opsPerSec - fastestOpsPerSec) < 0.1
           const name = isFastest ? `**${result.name}** 🏆` : result.name
-          console.log(`| ${name} | ${formatNumber(result.hz)} | ±${result.rme.toFixed(2)}% |`)
+          console.log(`| ${name} | ${formatNumber(result.opsPerSec)} | ±${result.margin.toFixed(2)}% |`)
         }
         console.log()
       }
@@ -73,9 +73,9 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
 
     // Compare each test case
     for (const prTestCase of prData) {
-      const baselineTestCase = baselineData.find(b => b.name === prTestCase.name)
+      const baselineTestCase = baselineData.find(b => b.benchmarkName === prTestCase.benchmarkName)
       
-      console.log(`**${prTestCase.description}**`)
+      console.log(`**${prTestCase.benchmarkName}**`)
       console.log()
 
       if (!baselineTestCase) {
@@ -84,10 +84,13 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
         console.log('| Solver | Ops/sec | Margin of Error |')
         console.log('|--------|---------|-----------------|')
         
+        // Find fastest solver
+        const fastestOpsPerSec = Math.max(...prTestCase.results.map(r => r.opsPerSec))
+        
         for (const result of prTestCase.results) {
-          const isFastest = result.name === prTestCase.fastest
+          const isFastest = Math.abs(result.opsPerSec - fastestOpsPerSec) < 0.1
           const name = isFastest ? `**${result.name}** 🏆` : result.name
-          console.log(`| ${name} | ${formatNumber(result.hz)} | ±${result.rme.toFixed(2)}% |`)
+          console.log(`| ${name} | ${formatNumber(result.opsPerSec)} | ±${result.margin.toFixed(2)}% |`)
         }
         console.log()
         continue
@@ -97,27 +100,30 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
       console.log('| Solver | Baseline | PR | Change | Performance |')
       console.log('|--------|----------|----|---------|-----------| ')
 
+      // Find fastest in each set
+      const fastestPrOpsPerSec = Math.max(...prTestCase.results.map(r => r.opsPerSec))
+      
       for (const prResult of prTestCase.results) {
         const baselineResult = baselineTestCase.results.find(b => b.name === prResult.name)
         
         if (!baselineResult) {
-          console.log(`| ${prResult.name} | - | ${formatNumber(prResult.hz)} ops/sec | New | 🆕 |`)
+          console.log(`| ${prResult.name} | - | ${formatNumber(prResult.opsPerSec)} ops/sec | New | 🆕 |`)
           continue
         }
 
-        const change = ((prResult.hz - baselineResult.hz) / baselineResult.hz) * 100
+        const change = ((prResult.opsPerSec - baselineResult.opsPerSec) / baselineResult.opsPerSec) * 100
         const emoji = getPerformanceEmoji(change)
-        const isFastest = prResult.name === prTestCase.fastest
+        const isFastest = Math.abs(prResult.opsPerSec - fastestPrOpsPerSec) < 0.1
         const name = isFastest ? `**${prResult.name}** 🏆` : prResult.name
 
-        console.log(`| ${name} | ${formatNumber(baselineResult.hz)} | ${formatNumber(prResult.hz)} | ${formatPercentage(change)} | ${emoji} |`)
+        console.log(`| ${name} | ${formatNumber(baselineResult.opsPerSec)} | ${formatNumber(prResult.opsPerSec)} | ${formatPercentage(change)} | ${emoji} |`)
       }
 
       // Check for removed solvers
       for (const baselineResult of baselineTestCase.results) {
         const prResult = prTestCase.results.find(p => p.name === baselineResult.name)
         if (!prResult) {
-          console.log(`| ${baselineResult.name} | ${formatNumber(baselineResult.hz)} ops/sec | - | Removed | ❌ |`)
+          console.log(`| ${baselineResult.name} | ${formatNumber(baselineResult.opsPerSec)} ops/sec | - | Removed | ❌ |`)
         }
       }
 
@@ -134,14 +140,14 @@ function compareBenchmarks(baselineFile: string, prFile: string): void {
     let totalChangeSum = 0
 
     for (const prTestCase of prData) {
-      const baselineTestCase = baselineData.find(b => b.name === prTestCase.name)
+      const baselineTestCase = baselineData.find(b => b.benchmarkName === prTestCase.benchmarkName)
       if (!baselineTestCase) continue
 
       for (const prResult of prTestCase.results) {
         const baselineResult = baselineTestCase.results.find(b => b.name === prResult.name)
         if (!baselineResult) continue
 
-        const change = ((prResult.hz - baselineResult.hz) / baselineResult.hz) * 100
+        const change = ((prResult.opsPerSec - baselineResult.opsPerSec) / baselineResult.opsPerSec) * 100
         totalComparisons++
         totalChangeSum += change
 

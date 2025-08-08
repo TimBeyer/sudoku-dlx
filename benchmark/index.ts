@@ -59,26 +59,23 @@ const isJsonMode = args.includes('--json')
 const outputFile = args.find(arg => !arg.startsWith('--'))
 
 interface BenchmarkResult {
-  name: string
-  puzzle: string
-  description: string
+  benchmarkName: string
   results: Array<{
     name: string
-    hz: number
-    rme: number
-    samples: number
+    opsPerSec: number
+    margin: number
+    runs: number
+    deprecated: boolean
   }>
-  fastest: string
-  timestamp: string
 }
 
 const benchmarkResults: BenchmarkResult[] = []
 
 function runBenchmark(testCase: SudokuTestCase, isJsonMode = false): Promise<void> {
   return new Promise((resolve) => {
-    const { name, puzzle, description } = testCase
-    const cells = parseStringFormat(puzzle)
-    const solvers = createSolver(puzzle)
+    const { description } = testCase
+    const cells = parseStringFormat(testCase.puzzle)
+    const solvers = createSolver(testCase.puzzle)
 
     if (!isJsonMode) {
       console.log(`Benchmark: ${description} \n`)
@@ -104,26 +101,26 @@ function runBenchmark(testCase: SudokuTestCase, isJsonMode = false): Promise<voi
           .sort((a: any, b: any) => b.hz - a.hz)
           .map((r: any) => ({
             name: r.name,
-            hz: r.hz,
-            rme: r.stats.rme,
-            samples: r.stats.sample.length
+            opsPerSec: r.hz,
+            margin: r.stats.rme,
+            runs: r.stats.sample.length,
+            deprecated: false
           }))
 
-        const fastest = this.filter('fastest').map('name')[0]
+        const fastest = this.filter('fastest').map('name')
 
         if (isJsonMode) {
           benchmarkResults.push({
-            name,
-            puzzle,
-            description,
-            results,
-            fastest,
-            timestamp: new Date().toISOString()
+            benchmarkName: description,
+            results
           })
         } else {
-          const output = results.map((r: any) => String(r)).join('\n')
+          const output = Array.from(this)
+            .sort((a: any, b: any) => b.hz - a.hz)
+            .map((r: any) => String(r))
+            .join('\n')
           console.log(output)
-          console.log('\nFastest is ' + fastest + '\n\n')
+          console.log('\nFastest is ' + fastest.join(',') + '\n\n')
         }
 
         resolve()
