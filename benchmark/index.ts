@@ -14,7 +14,7 @@ const SHOW_PROGRESS = process.env['SHOW_PROGRESS'] && process.env['SHOW_PROGRESS
 interface SudokuTestCase {
   name: string
   puzzle: string
-  description?: string
+  description: string
 }
 
 const TEST_CASES: SudokuTestCase[] = [
@@ -52,49 +52,110 @@ function createSolver(puzzle: string) {
   return solvers
 }
 
-function runBenchmark(testCase: SudokuTestCase) {
-  const { puzzle, description } = testCase
-  const cells = parseStringFormat(puzzle)
-  const solvers = createSolver(puzzle)
 
-  console.log(`Benchmark: ${description} \n`)
-  console.log(printBoard(cells))
-  console.log('\n')
+// Parse command line arguments
+const args = process.argv.slice(2)
+const isJsonMode = args.includes('--json')
+const outputFile = args.find(arg => !arg.startsWith('--'))
 
-  const suite = new Benchmark.Suite()
-
-  // Add all solvers to the benchmark suite
-  Object.entries(solvers).forEach(([solverName, solverFn]) => {
-    suite.add(solverName, solverFn)
-  })
-
-  suite
-    .on('cycle', (event: any) => {
-      if (SHOW_PROGRESS) {
-        console.log(String(event.target))
-      }
-    })
-    .on('complete', function (this: any) {
-      const results = Array.from(this)
-        .sort((a: any, b: any) => b.hz - a.hz)
-        .map((r: any) => String(r))
-        .join('\n')
-
-      console.log(results)
-      console.log('\nFastest is ' + this.filter('fastest').map('name') + '\n\n')
-    })
-    .run()
+interface BenchmarkResult {
+  name: string
+  puzzle: string
+  description: string
+  results: Array<{
+    name: string
+    hz: number
+    rme: number
+    samples: number
+  }>
+  fastest: string
+  timestamp: string
 }
 
-function main() {
-  console.log('Running Sudoku Solver Benchmarks\n')
-  console.log(`Node.js version: ${process.version}`)
-  console.log(`Platform: ${process.platform} ${process.arch}`)
-  console.log(`Show progress: ${SHOW_PROGRESS ? 'enabled' : 'disabled'}\n`)
+const benchmarkResults: BenchmarkResult[] = []
+
+function runBenchmark(testCase: SudokuTestCase, isJsonMode = false): Promise<void> {
+  return new Promise((resolve) => {
+    const { name, puzzle, description } = testCase
+    const cells = parseStringFormat(puzzle)
+    const solvers = createSolver(puzzle)
+
+    if (!isJsonMode) {
+      console.log(`Benchmark: ${description} \n`)
+      console.log(printBoard(cells))
+      console.log('\n')
+    }
+
+    const suite = new Benchmark.Suite()
+
+    // Add all solvers to the benchmark suite
+    Object.entries(solvers).forEach(([solverName, solverFn]) => {
+      suite.add(solverName, solverFn)
+    })
+
+    suite
+      .on('cycle', (event: any) => {
+        if (SHOW_PROGRESS && !isJsonMode) {
+          console.log(String(event.target))
+        }
+      })
+      .on('complete', function (this: any) {
+        const results = Array.from(this)
+          .sort((a: any, b: any) => b.hz - a.hz)
+          .map((r: any) => ({
+            name: r.name,
+            hz: r.hz,
+            rme: r.stats.rme,
+            samples: r.stats.sample.length
+          }))
+
+        const fastest = this.filter('fastest').map('name')[0]
+
+        if (isJsonMode) {
+          benchmarkResults.push({
+            name,
+            puzzle,
+            description,
+            results,
+            fastest,
+            timestamp: new Date().toISOString()
+          })
+        } else {
+          const output = results.map((r: any) => String(r)).join('\n')
+          console.log(output)
+          console.log('\nFastest is ' + fastest + '\n\n')
+        }
+
+        resolve()
+      })
+      .run()
+  })
+}
+
+async function main() {
+  if (!isJsonMode) {
+    console.log('Running Sudoku Solver Benchmarks\n')
+    console.log(`Node.js version: ${process.version}`)
+    console.log(`Platform: ${process.platform} ${process.arch}`)
+    console.log(`Show progress: ${SHOW_PROGRESS ? 'enabled' : 'disabled'}\n`)
+  }
 
   // Run all test cases
   for (const testCase of TEST_CASES) {
-    runBenchmark(testCase)
+    await runBenchmark(testCase, isJsonMode)
+  }
+
+  if (isJsonMode) {
+    const output = JSON.stringify(benchmarkResults, null, 2)
+    if (outputFile) {
+      const fs = await import('fs')
+      fs.writeFileSync(outputFile, output)
+      if (!SHOW_PROGRESS) {
+        console.log(`Results written to ${outputFile}`)
+      }
+    } else {
+      console.log(output)
+    }
   }
 }
 
