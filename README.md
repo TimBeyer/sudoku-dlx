@@ -183,16 +183,16 @@ Direct comparison: every solver receives the same independent puzzles and perfor
 
 | Solver                     | Puzzles/sec |          Relative |  Margin |
 | -------------------------- | ----------: | ----------------: | ------: |
-| sudoku-dlx solveString     |   65,680.69 | **1.00× fastest** |  ±0.19% |
-| sudoku-dlx solveCells      |    63,841.4 |             0.97× |  ±0.22% |
-| SudokuBlitz                |   60,953.29 |             0.93× |  ±0.31% |
-| @reetesh/sudoku-engine     |   29,635.17 |             0.45× |  ±0.42% |
-| @algorithm.ts/sudoku       |   15,856.21 |             0.24× |  ±0.11% |
-| fast-sudoku-solver         |    8,108.48 |             0.12× |  ±1.42% |
-| openzeloku                 |    3,541.36 |             0.05× |  ±1.96% |
-| sudoku-pro                 |    2,726.37 |             0.04× |  ±4.84% |
-| @pyroth/sodo (WebAssembly) |    1,372.96 |             0.02× |  ±1.23% |
-| @hackettyam/sudoku-tools   |       98.35 |            <0.01× | ±12.38% |
+| SudokuBlitz                |   49,236.67 | **1.00× fastest** |  ±1.01% |
+| sudoku-dlx solveString     |   42,064.66 |             0.85× |  ±1.38% |
+| sudoku-dlx solveCells      |   40,096.13 |             0.81× |  ±0.73% |
+| @reetesh/sudoku-engine     |   25,997.77 |             0.53× |  ±3.33% |
+| @algorithm.ts/sudoku       |    21,516.9 |             0.44× |  ±0.51% |
+| fast-sudoku-solver         |    7,807.72 |             0.16× |  ±5.52% |
+| openzeloku                 |    3,979.81 |             0.08× |  ±4.90% |
+| sudoku-pro                 |    2,879.61 |             0.06× |  ±8.34% |
+| @pyroth/sodo (WebAssembly) |    1,225.98 |             0.02× |  ±3.60% |
+| @hackettyam/sudoku-tools   |       88.94 |            <0.01× | ±12.03% |
 
 ### Representative corpus — parsed input to first solution
 
@@ -202,13 +202,13 @@ Direct comparison: every solver receives the same independent puzzles and perfor
 
 | Solver                   | Puzzles/sec |          Relative |  Margin |
 | ------------------------ | ----------: | ----------------: | ------: |
-| sudoku-dlx solveCells    |   60,603.25 | **1.00× fastest** |  ±0.13% |
-| @reetesh/sudoku-engine   |   33,988.25 |             0.56× |  ±0.40% |
-| @algorithm.ts/sudoku     |    16,231.5 |             0.27× |  ±0.10% |
-| fast-sudoku-solver       |    7,198.92 |             0.12× |  ±1.33% |
-| openzeloku               |    3,587.63 |             0.06× |  ±1.97% |
-| sudoku-pro               |    2,736.56 |             0.05× |  ±4.89% |
-| @hackettyam/sudoku-tools |       98.73 |            <0.01× | ±12.21% |
+| sudoku-dlx solveCells    |   39,636.94 | **1.00× fastest** |  ±0.79% |
+| @reetesh/sudoku-engine   |   30,968.24 |             0.78× |  ±0.97% |
+| @algorithm.ts/sudoku     |   23,678.71 |             0.60× |  ±0.58% |
+| fast-sudoku-solver       |    8,360.61 |             0.21× |  ±3.66% |
+| openzeloku               |    3,997.17 |             0.10× |  ±4.88% |
+| sudoku-pro               |    2,918.86 |             0.07× |  ±8.79% |
+| @hackettyam/sudoku-tools |       91.52 |            <0.01× | ±12.19% |
 
 ### Compiled fixed-puzzle replay — sudoku-dlx capability
 
@@ -218,22 +218,22 @@ Capability only: exact-puzzle compilation happened before timing. These absolute
 
 | Mode                             | Puzzles/sec | Margin |
 | -------------------------------- | ----------: | -----: |
-| sudoku-dlx compiled-string solve |  112,995.04 | ±0.61% |
-| sudoku-dlx compiled-cells solve  |   113,906.7 | ±0.13% |
+| sudoku-dlx compiled-string solve |   75,426.75 | ±1.89% |
+| sudoku-dlx compiled-cells solve  |   73,447.23 | ±3.19% |
 
 ### Reproduction metadata
 
-- Runtime: node v25.7.0 (Node 25.7.0)
-- CPU: Apple M4; 10 logical CPUs
-- Platform: darwin 25.3.0, arm64
-- Repository state: `db2b03ffd1a05dbe91a8185c88c634e85e91d90e` with uncommitted benchmark changes
+- Runtime: node v24.18.0 (Node 24.18.0)
+- CPU: AMD EPYC; 4 logical CPUs
+- Platform: linux 7.1.3, x64
+- Repository state: `b0882528faea56d01532ee7f6b92ccfc2b70c213` (clean)
 - Lockfile SHA-256: `5e57fe42385e96d7e35f974be3c13e76d885adbe753036df997030e1331978c5`
-- Tinybench minima: 250 ms warmup and 2000 ms measurement per task; iteration minima may run longer
+- Tinybench minima: 100 ms warmup and 500 ms measurement per task; iteration minima may run longer
 - Measurement: complete-corpus-pass; rate: total-puzzles-per-total-elapsed-time
 - Ranked input schedule: fresh-deterministic-digit-isomorph-v1-per-pass
 - Validation: warmup-before-and-last-timed-pass-after
 - Solvers: sudoku-dlx solveString workspace (MIT, javascript); sudoku-dlx solveCells workspace (MIT, javascript); fast-sudoku-solver 3.0.3 (MIT, javascript); @algorithm.ts/sudoku 4.0.4 (MIT, javascript); SudokuBlitz 1.0.0 (MIT, javascript); @reetesh/sudoku-engine 2.1.0 (MIT, javascript); openzeloku 0.1.0 (MIT, javascript); sudoku-pro 1.0.15 (MIT, javascript); @hackettyam/sudoku-tools 1.1.0 (MIT, javascript); @pyroth/sodo (WebAssembly) 0.2.1 (MIT, wasm); sudoku-dlx compiled-string solve workspace (MIT, javascript); sudoku-dlx compiled-cells solve workspace (MIT, javascript)
-- Generated: 2026-07-18T20:42:20.283Z
+- Generated: 2026-07-18T21:37:11.171Z
 
 Compiled replay is an unranked sudoku-dlx capability for repeatedly solving identical givens. Legacy all-solution APIs remain in their own best-effort group.
 
