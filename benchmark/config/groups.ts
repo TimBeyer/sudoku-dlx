@@ -5,10 +5,7 @@ import {
   internalPreparedSolvers,
   legacySolvers,
   maintainedPreparedSolvers,
-  maintainedSolvers,
-  nativeAddonSolvers,
-  nativePreparedSolvers,
-  wasmSolvers
+  maintainedSolvers
 } from './solvers.js'
 
 const modernEndToEnd = [...internalEndToEndSolvers, ...maintainedSolvers] as const
@@ -27,19 +24,11 @@ export const groups = {
   competitive: {
     name: 'competitive',
     description:
-      'Direct, solve-once comparisons against maintained JavaScript solvers plus an unranked sudoku-dlx capability section.',
+      'Direct, solve-once comparisons against maintained npm solvers plus an unranked sudoku-dlx capability section.',
     matrix: {
       'representative-end-to-end': modernEndToEnd,
       'representative-prepared': modernPrepared,
       'representative-compiled-replay': internalCompiledSolvers
-    }
-  },
-  wasm: {
-    name: 'wasm',
-    description:
-      'Direct steady-state comparison with WebAssembly solvers after one-time module initialization.',
-    matrix: {
-      'representative-end-to-end': ['internal-string', ...wasmSolvers]
     }
   },
   legacy: {
@@ -58,15 +47,6 @@ export const groups = {
       'representative-prepared': modernPrepared,
       'representative-compiled-replay': internalCompiledSolvers,
       'easy-end-to-end': ['internal-string', ...legacySolvers]
-    }
-  },
-  native: {
-    name: 'native',
-    description: 'Direct in-process comparison with optional historical Node native addons.',
-    matrix: {
-      'representative-end-to-end': ['internal-string', ...nativeAddonSolvers],
-      'representative-prepared': ['internal-cells', ...nativePreparedSolvers],
-      'representative-compiled-replay': internalCompiledSolvers
     }
   }
 } as const satisfies Record<string, BenchmarkGroup>

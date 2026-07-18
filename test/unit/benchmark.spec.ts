@@ -1,5 +1,6 @@
 import { expect } from 'chai'
 import { calculateCorpusThroughput, createIsomorphicCorpus } from '../../benchmark/runner.js'
+import { groups } from '../../benchmark/config/groups.js'
 import {
   REPRESENTATIVE_CORPUS,
   REPRESENTATIVE_WARMUP_CORPUS
@@ -19,13 +20,6 @@ const ENVIRONMENT = {
   architecture: 'x64',
   cpu: 'test cpu',
   logicalCpus: 1
-} as const
-
-const PUBLISHING_ENVIRONMENT = {
-  ...ENVIRONMENT,
-  gitSha: 'benchmark-commit',
-  gitDirty: false,
-  lockfileSha256: 'benchmark-lockfile'
 } as const
 
 function section(
@@ -104,61 +98,6 @@ function report(sections: readonly BenchmarkSection[]): BenchmarkReport {
   }
 }
 
-function publishingReport(
-  group: 'competitive' | 'wasm',
-  sections: readonly BenchmarkSection[]
-): BenchmarkReport {
-  const sharedSolver = {
-    id: 'internal-string',
-    name: 'sudoku-dlx solveString',
-    version: 'workspace',
-    license: 'MIT',
-    runtime: 'javascript',
-    optional: false
-  } as const
-  return {
-    ...report(sections),
-    group,
-    environment: PUBLISHING_ENVIRONMENT,
-    solvers:
-      group === 'wasm'
-        ? [
-            sharedSolver,
-            {
-              id: 'pyroth-sodo-wasm',
-              name: '@pyroth/sodo (Wasm)',
-              version: '0.2.1',
-              license: 'MIT',
-              runtime: 'wasm',
-              optional: false
-            }
-          ]
-        : [sharedSolver]
-  }
-}
-
-function wasmSection(): BenchmarkSection {
-  const value = section('ranked', 'end-to-end')
-  return {
-    ...value,
-    executionOrder: ['internal-string', 'pyroth-sodo-wasm'],
-    results: [
-      {
-        ...value.results[0],
-        solverId: 'internal-string',
-        name: 'sudoku-dlx solveString',
-        opsPerSec: 60_000
-      },
-      {
-        ...value.results[0],
-        solverId: 'pyroth-sodo-wasm',
-        name: '@pyroth/sodo (Wasm)',
-        opsPerSec: 1_400
-      }
-    ]
-  }
-}
-
 describe('benchmark measurement contract', function () {
   it('computes corpus throughput from total work and total elapsed time', function () {
     expect(calculateCorpusThroughput(8, 5, 2_000)).to.equal(20)
@@ -220,113 +159,9 @@ describe('benchmark measurement contract', function () {
     expect(markdown).not.to.include('| Relative |')
   })
 
-  it('renders Wasm results as a separately labelled steady-state runtime comparison', function () {
-    const competitive = publishingReport('competitive', [section('ranked', 'end-to-end')])
-    const wasm = publishingReport('wasm', [wasmSection()])
-
-    const markdown = generateBenchmarkMarkdown(competitive, wasm)
-    const wasmHeading = markdown.indexOf('### Alternative runtime — WebAssembly steady state')
-
-    expect(wasmHeading).to.be.greaterThan(markdown.indexOf('end-to-end benchmark'))
-    expect(markdown.slice(0, wasmHeading)).not.to.include('@pyroth/sodo (Wasm)')
-    expect(markdown.slice(wasmHeading)).to.include('@pyroth/sodo (Wasm)')
-    expect(markdown.slice(wasmHeading)).to.include('representative-64')
-    expect(markdown.slice(wasmHeading)).to.include('fresh-deterministic-digit-isomorph-v1-per-pass')
-    expect(markdown.slice(wasmHeading)).to.match(
-      /one-time (Wasm|WebAssembly) initialization .*excluded/i
-    )
-    expect(markdown.slice(wasmHeading)).to.match(/per-call string marshalling .*timed/i)
-    expect(markdown.slice(wasmHeading)).to.match(/not a cold-start/i)
-  })
-
-  it('refuses a stale Wasm report from another repository revision', function () {
-    const competitive = publishingReport('competitive', [section('ranked', 'end-to-end')])
-    const wasm: BenchmarkReport = {
-      ...publishingReport('wasm', [wasmSection()]),
-      environment: {
-        ...PUBLISHING_ENVIRONMENT,
-        gitSha: 'stale-commit'
-      }
-    }
-
-    expect(() => generateBenchmarkMarkdown(competitive, wasm)).to.throw(
-      /repository|revision|commit|git/i
-    )
-  })
-
-  it('refuses a Wasm report produced from a different dependency lockfile', function () {
-    const competitive = publishingReport('competitive', [section('ranked', 'end-to-end')])
-    const wasm: BenchmarkReport = {
-      ...publishingReport('wasm', [wasmSection()]),
-      environment: {
-        ...PUBLISHING_ENVIRONMENT,
-        lockfileSha256: 'other-lockfile'
-      }
-    }
-
-    expect(() => generateBenchmarkMarkdown(competitive, wasm)).to.throw(/lockfile/i)
-  })
-
-  it('refuses a Wasm report measured against a different corpus revision', function () {
-    const competitive = publishingReport('competitive', [section('ranked', 'end-to-end')])
-    const wasmBase = publishingReport('wasm', [wasmSection()])
-    const wasm: BenchmarkReport = {
-      ...wasmBase,
-      datasets: wasmBase.datasets.map(dataset =>
-        dataset.id === 'representative-64' ? { ...dataset, sha256: 'other-corpus' } : dataset
-      )
-    }
-
-    expect(() => generateBenchmarkMarkdown(competitive, wasm)).to.throw(/dataset|corpus|sha/i)
-  })
-
-  it('requires the competitive and Wasm report group identities', function () {
-    const competitive = publishingReport('competitive', [section('ranked', 'end-to-end')])
-    const mislabeledWasm: BenchmarkReport = {
-      ...publishingReport('wasm', [wasmSection()]),
-      group: 'comprehensive'
-    }
-
-    expect(() => generateBenchmarkMarkdown(competitive, mislabeledWasm)).to.throw(/group|wasm/i)
-  })
-
-  it('refuses paired reports without enough provenance to prove they match', function () {
-    const competitive = publishingReport('competitive', [section('ranked', 'end-to-end')])
-    const wasm: BenchmarkReport = {
-      ...publishingReport('wasm', [wasmSection()]),
-      environment: ENVIRONMENT
-    }
-
-    expect(() => generateBenchmarkMarkdown(competitive, wasm)).to.throw(
-      /provenance|repository|commit|git|lockfile/i
-    )
-  })
-
-  it('refuses paired reports from different benchmark environments', function () {
-    const competitive = publishingReport('competitive', [section('ranked', 'end-to-end')])
-    const wasm: BenchmarkReport = {
-      ...publishingReport('wasm', [wasmSection()]),
-      environment: {
-        ...PUBLISHING_ENVIRONMENT,
-        cpu: 'other cpu'
-      }
-    }
-
-    expect(() => generateBenchmarkMarkdown(competitive, wasm)).to.throw(/environment|cpu/i)
-  })
-
-  it('refuses paired reports measured with different benchmark settings', function () {
-    const competitive = publishingReport('competitive', [section('ranked', 'end-to-end')])
-    const wasmBase = publishingReport('wasm', [wasmSection()])
-    const wasm: BenchmarkReport = {
-      ...wasmBase,
-      configuration: {
-        ...wasmBase.configuration,
-        timeMs: wasmBase.configuration.timeMs * 2
-      }
-    }
-
-    expect(() => generateBenchmarkMarkdown(competitive, wasm)).to.throw(/configuration|timing/i)
+  it('compares npm-packaged Wasm through the ordinary end-to-end contract', function () {
+    expect(groups.competitive.matrix['representative-end-to-end']).to.include('pyroth-sodo-wasm')
+    expect(groups).not.to.have.property('wasm')
   })
 
   it('refuses to compare rates across measurement schema versions', function () {

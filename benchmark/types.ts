@@ -24,7 +24,7 @@ export interface SolverMetadata {
   readonly source?: string
   readonly sourceCommit?: string
   readonly license: string
-  readonly runtime: 'javascript' | 'wasm' | 'native-addon'
+  readonly runtime: 'javascript' | 'wasm'
   readonly optional: boolean
 }
 

@@ -14,7 +14,6 @@ export interface UpdateOptions {
   readonly quiet: boolean
   readonly dryRun: boolean
   readonly inputFile?: string
-  readonly wasmInputFile?: string
   readonly benchmarkTimeoutMs: number
 }
 
@@ -38,18 +37,12 @@ export class BenchmarkDocUpdater {
   }
 
   async update(): Promise<void> {
-    const competitiveReport = this.options.inputFile
+    const report = this.options.inputFile
       ? (JSON.parse(await readFile(this.options.inputFile, 'utf8')) as BenchmarkReport)
-      : await this.runBenchmark('competitive')
-    const wasmReport = this.options.wasmInputFile
-      ? (JSON.parse(await readFile(this.options.wasmInputFile, 'utf8')) as BenchmarkReport)
-      : this.options.inputFile
-        ? undefined
-        : await this.runBenchmark('wasm')
-    assertReport(competitiveReport, 'competitive')
-    if (wasmReport) assertReport(wasmReport, 'wasm')
+      : await this.runBenchmark()
+    assertReport(report, 'competitive')
 
-    const markdown = generateBenchmarkMarkdown(competitiveReport, wasmReport)
+    const markdown = generateBenchmarkMarkdown(report)
     if (this.options.dryRun) {
       process.stdout.write(markdown)
       return
@@ -61,16 +54,12 @@ export class BenchmarkDocUpdater {
     this.log(`Updated ${readmePath}`)
   }
 
-  private async runBenchmark(group: 'competitive' | 'wasm'): Promise<BenchmarkReport> {
-    this.log(
-      group === 'competitive'
-        ? 'Running maintained competitive benchmarks'
-        : 'Running the separate WebAssembly benchmark group'
-    )
+  private async runBenchmark(): Promise<BenchmarkReport> {
+    this.log('Running maintained competitive benchmarks')
     const benchmarkPath = join(this.projectRoot, 'built', 'dev', 'benchmark', 'index.js')
     const { stdout, stderr } = await execFileAsync(
       process.execPath,
-      [benchmarkPath, `--${group}`, '--json', '--quiet'],
+      [benchmarkPath, '--competitive', '--json', '--quiet'],
       {
         cwd: this.projectRoot,
         timeout: this.options.benchmarkTimeoutMs,
@@ -87,23 +76,14 @@ export class BenchmarkDocUpdater {
   }
 }
 
-export function generateBenchmarkMarkdown(
-  report: BenchmarkReport,
-  wasmReport?: BenchmarkReport
-): string {
-  if (wasmReport) assertCompatiblePublishingReports(report, wasmReport)
-
+export function generateBenchmarkMarkdown(report: BenchmarkReport): string {
   let markdown = `## Benchmarks\n\n`
   markdown +=
-    "Ranked tables compare the same ordinary first-solution workload. Each timed sample processes one complete corpus pass, and throughput is total puzzles divided by total elapsed time. End-to-end cases include public input conversion and puzzle-specific setup; prepared cases exclude only conversion to each library's natural input representation. Ranked passes receive fresh deterministic digit-isomorphic strings and fresh prepared objects outside timing, preventing exact-result caches or input mutation from benefiting from harness repetition. Warmup uses a disjoint corpus, and measured outputs are validated after timing.\n\n"
+    "Ranked tables compare the same ordinary first-solution workload regardless of whether an npm package is implemented in JavaScript or WebAssembly. Module loading and one-time runtime initialization happen before timing; per-call marshalling, public input conversion, puzzle-specific setup, and solving remain timed. Each timed sample processes one complete corpus pass, and throughput is total puzzles divided by total elapsed time. Prepared cases exclude only conversion to each library's natural input representation. Ranked passes receive fresh deterministic digit-isomorphic strings and fresh prepared objects outside timing, preventing exact-result caches or input mutation from benefiting from harness repetition. Warmup uses a disjoint corpus, and measured outputs are validated after timing.\n\n"
 
   for (const section of report.sections) {
     if (section.results.length === 0) continue
     markdown += renderSection(section)
-  }
-
-  if (wasmReport) {
-    markdown += renderWasmReport(wasmReport)
   }
 
   markdown += '### Reproduction metadata\n\n'
@@ -120,16 +100,11 @@ export function generateBenchmarkMarkdown(
   markdown += `- Measurement: ${report.configuration.timedOperation}; rate: ${report.configuration.rate}\n`
   markdown += `- Ranked input schedule: ${report.configuration.rankedInputSchedule}\n`
   markdown += `- Validation: ${report.configuration.validation}\n`
-  markdown += `- JavaScript and capability solvers: ${report.solvers.map(solver => `${solver.name} ${solver.version} (${solver.license})`).join('; ')}\n`
-  markdown += `- Competitive sections generated: ${report.generatedAt}\n`
-  if (wasmReport) {
-    markdown += `- WebAssembly section solvers: ${wasmReport.solvers.map(solver => `${solver.name} ${solver.version} (${solver.license})`).join('; ')}\n`
-    markdown += `- WebAssembly section generated: ${wasmReport.generatedAt}\n`
-  }
+  markdown += `- Solvers: ${report.solvers.map(solver => `${solver.name} ${solver.version} (${solver.license}, ${solver.runtime})`).join('; ')}\n`
+  markdown += `- Generated: ${report.generatedAt}\n`
   markdown += '\n'
-  markdown += wasmReport
-    ? 'Compiled replay is an unranked sudoku-dlx capability for repeatedly solving identical givens. WebAssembly is shown in its separately labelled steady-state section; native addons, native executables, legacy all-solution APIs, and third-party corpora remain in other separately labelled groups.\n'
-    : 'Compiled replay is an unranked sudoku-dlx capability for repeatedly solving identical givens. WebAssembly, native addons, native executables, legacy all-solution APIs, and third-party corpora are kept in separately labelled groups.\n'
+  markdown +=
+    'Compiled replay is an unranked sudoku-dlx capability for repeatedly solving identical givens. Legacy all-solution APIs remain in their own best-effort group.\n'
   return markdown
 }
 
@@ -148,21 +123,6 @@ function renderSection(section: BenchmarkSection): string {
     for (const result of section.results) {
       markdown += `| ${escapeCell(result.name)} | ${formatRate(result.opsPerSec)} | ±${result.margin.toFixed(2)}% |\n`
     }
-  }
-  return `${markdown}\n`
-}
-
-function renderWasmReport(report: BenchmarkReport): string {
-  const sections = report.sections.filter(section => section.results.length > 0)
-  let markdown = '### Alternative runtime — WebAssembly steady state\n\n'
-  markdown +=
-    'This separate runtime comparison uses the same solve-once corpus and fresh-input schedule as the JavaScript end-to-end tier. One-time WebAssembly initialization is excluded, while per-call string marshalling and solving are timed. It describes an already-loaded library and is not a cold-start result; its ranking is intentionally kept out of the JavaScript table above.\n\n'
-
-  for (const [index, section] of sections.entries()) {
-    if (sections.length > 1) markdown += `#### ${section.benchmarkName}\n\n`
-    markdown += sectionContract(section)
-    markdown += renderRankedTable(section, 'Relative in section')
-    if (index < sections.length - 1) markdown += '\n'
   }
   return `${markdown}\n`
 }
@@ -230,161 +190,6 @@ function assertReport(report: BenchmarkReport, expectedGroup?: string): void {
   }
 }
 
-export function assertCompatiblePublishingReports(
-  competitiveReport: BenchmarkReport,
-  wasmReport: BenchmarkReport
-): void {
-  assertReport(competitiveReport, 'competitive')
-  assertReport(wasmReport, 'wasm')
-
-  assertPresentProvenance(competitiveReport, 'competitive')
-  assertPresentProvenance(wasmReport, 'WebAssembly')
-
-  const environmentKeys = [
-    'runtime',
-    'runtimeVersion',
-    'nodeVersion',
-    'v8Version',
-    'os',
-    'architecture',
-    'cpu',
-    'logicalCpus',
-    'gitSha',
-    'gitDirty',
-    'lockfileSha256'
-  ] as const
-  for (const key of environmentKeys) {
-    if (competitiveReport.environment[key] !== wasmReport.environment[key]) {
-      const label =
-        key === 'gitSha'
-          ? 'repository Git revision'
-          : key === 'lockfileSha256'
-            ? 'dependency lockfile SHA-256'
-            : `benchmark environment field '${key}'`
-      throw new Error(`Cannot combine reports with a different ${label}`)
-    }
-  }
-
-  if (!sameValue(competitiveReport.configuration, wasmReport.configuration)) {
-    throw new Error('Cannot combine reports with different benchmark timing contracts')
-  }
-
-  if (wasmReport.sections.length === 0) {
-    throw new Error('WebAssembly report contains no benchmark sections')
-  }
-  const wasmSolversById = new Map(wasmReport.solvers.map(solver => [solver.id, solver]))
-  const sharedSolvers = wasmReport.solvers.filter(
-    wasmSolver =>
-      wasmSolver.runtime === 'javascript' &&
-      competitiveReport.solvers.some(competitiveSolver => competitiveSolver.id === wasmSolver.id)
-  )
-  if (sharedSolvers.length === 0) {
-    throw new Error('WebAssembly report has no shared JavaScript baseline from the competitive run')
-  }
-  const sharedSolverIds = new Set(sharedSolvers.map(solver => solver.id))
-  const wasmSolverIds = new Set(
-    wasmReport.solvers.filter(solver => solver.runtime === 'wasm').map(solver => solver.id)
-  )
-  if (wasmSolverIds.size === 0) {
-    throw new Error('WebAssembly report contains no WebAssembly solver')
-  }
-
-  for (const wasmSection of wasmReport.sections) {
-    if (wasmSection.comparison !== 'ranked' || wasmSection.tier !== 'end-to-end') {
-      throw new Error('The WebAssembly publication group must contain ranked end-to-end sections')
-    }
-    if (wasmSection.results.some(result => !wasmSolversById.has(result.solverId))) {
-      throw new Error(
-        `WebAssembly section '${wasmSection.caseId}' contains an unknown solver result`
-      )
-    }
-    if (!wasmSection.results.some(result => sharedSolverIds.has(result.solverId))) {
-      throw new Error(`WebAssembly section '${wasmSection.caseId}' is missing its shared baseline`)
-    }
-    if (!wasmSection.results.some(result => wasmSolverIds.has(result.solverId))) {
-      throw new Error(`WebAssembly section '${wasmSection.caseId}' has no WebAssembly result`)
-    }
-    const competitiveSection = competitiveReport.sections.find(
-      section => section.caseId === wasmSection.caseId
-    )
-    if (!competitiveSection) {
-      throw new Error(`Competitive report is missing corpus case '${wasmSection.caseId}'`)
-    }
-    if (!competitiveSection.results.some(result => sharedSolverIds.has(result.solverId))) {
-      throw new Error(
-        `Competitive corpus case '${wasmSection.caseId}' is missing the shared JavaScript baseline`
-      )
-    }
-    assertSameSectionContract(competitiveSection, wasmSection)
-
-    for (const datasetId of [wasmSection.datasetId, wasmSection.warmupDatasetId]) {
-      const competitiveDataset = competitiveReport.datasets.find(
-        dataset => dataset.id === datasetId
-      )
-      const wasmDataset = wasmReport.datasets.find(dataset => dataset.id === datasetId)
-      if (!competitiveDataset || !wasmDataset) {
-        throw new Error(`Cannot verify benchmark dataset '${datasetId}'`)
-      }
-      if (competitiveDataset.sha256 !== wasmDataset.sha256) {
-        throw new Error(
-          `Cannot combine reports with a different dataset SHA-256 for '${datasetId}'`
-        )
-      }
-    }
-  }
-
-  for (const sharedSolver of sharedSolvers) {
-    const competitiveSolver = competitiveReport.solvers.find(
-      solver => solver.id === sharedSolver.id
-    )
-    if (!sameValue(competitiveSolver, sharedSolver)) {
-      throw new Error(`Shared solver metadata differs for '${sharedSolver.id}'`)
-    }
-  }
-}
-
-function assertPresentProvenance(report: BenchmarkReport, label: string): void {
-  if (!report.environment.gitSha) {
-    throw new Error(`${label} report is missing its repository Git revision`)
-  }
-  if (report.environment.gitDirty === undefined) {
-    throw new Error(`${label} report is missing its repository dirty-state provenance`)
-  }
-  if (!report.environment.lockfileSha256) {
-    throw new Error(`${label} report is missing its dependency lockfile SHA-256`)
-  }
-}
-
-function assertSameSectionContract(
-  competitiveSection: BenchmarkSection,
-  wasmSection: BenchmarkSection
-): void {
-  const keys = [
-    'caseId',
-    'benchmarkName',
-    'datasetId',
-    'warmupDatasetId',
-    'semantics',
-    'tier',
-    'comparison',
-    'puzzleCount',
-    'warmupPuzzleCount',
-    'timedOperation',
-    'inputSchedule'
-  ] as const
-  for (const key of keys) {
-    if (competitiveSection[key] !== wasmSection[key]) {
-      throw new Error(
-        `Cannot combine reports with a different corpus contract field '${key}' for '${wasmSection.caseId}'`
-      )
-    }
-  }
-}
-
-function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
 function findProjectRoot(start: string): string {
   let directory = resolve(start)
   for (let depth = 0; depth < 5; depth++) {
@@ -401,7 +206,6 @@ function parseOptions(args = process.argv.slice(2)): UpdateOptions & { help: boo
     quiet: args.includes('--quiet'),
     dryRun: args.includes('--dry-run'),
     inputFile: args.find(argument => argument.startsWith('--input='))?.slice(8),
-    wasmInputFile: args.find(argument => argument.startsWith('--wasm-input='))?.slice(13),
     benchmarkTimeoutMs: 300_000,
     help: args.includes('--help') || args.includes('-h')
   }
@@ -410,11 +214,10 @@ function parseOptions(args = process.argv.slice(2)): UpdateOptions & { help: boo
 function showUsage(): void {
   console.log(`Usage: update-benchmark-docs [options]
 
-  --input=<report.json>       Render an existing competitive schema-v2 report
-  --wasm-input=<report.json>  Add a separately rendered WebAssembly schema-v2 report
-  --dry-run                   Print the generated benchmark section without editing README.md
-  --quiet                     Suppress progress logs
-  --help                      Show this help`)
+  --input=<report.json>  Render an existing competitive schema-v2 report
+  --dry-run              Print the generated benchmark section without editing README.md
+  --quiet                Suppress progress logs
+  --help                 Show this help`)
 }
 
 export async function main(args = process.argv.slice(2)): Promise<void> {

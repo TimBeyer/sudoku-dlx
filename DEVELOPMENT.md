@@ -18,7 +18,7 @@ npm ci
 - `lib/` contains parsing, display, validation, and exact-cover candidate generation.
 - `test/` contains the Mocha/Chai unit suite, loaded directly from TypeScript through `tsx`.
 - `benchmark/` contains datasets, solver adapters, and the Tinybench runner.
-- `scripts/` contains report comparison, benchmark-doc generation, and native competition tools.
+- `scripts/` contains report comparison, corpus verification, and benchmark-doc generation tools.
 - `bin/sudoku-solve` is the published CLI.
 
 Production builds write ESM to `built/lib/` and declarations to `built/typings/`. Development builds
@@ -40,14 +40,11 @@ npm run format:check           # Check formatting without writing
 npm run check                  # Format check, lint, unit tests, and production build
 npm run benchmark              # Run internal regression benchmarks
 npm run benchmark:json -- report.json
-npm run benchmark:competitive  # Compare with maintained JavaScript solvers
-npm run benchmark:wasm         # Run the separately labelled steady-state Wasm group
+npm run benchmark:competitive  # Compare with maintained npm solvers
 npm run benchmark:legacy       # Run best-effort historical JavaScript adapters
 npm run benchmark:comprehensive
 npm run benchmark:corpus:verify
 npm run compare-benchmarks -- baseline.json candidate.json
-npm run benchmark:competition:setup -- --data --skip-schoku
-npm run benchmark:competition  # Portable native set on the canonical corpus
 npm run profile                # Capture a V8 CPU profile
 npm run pack:check             # Inspect the npm package contents without publishing
 npm run check:package          # Smoke-test the ESM export, CLI, and npm packlist
@@ -74,12 +71,13 @@ PR benchmarks compare the branch with its merge base on the same Namespace runne
 Node.js and Bun runtimes. They run only the internal regression group so dependency or competitor
 behavior cannot hide a product regression.
 
-Competitive JavaScript and separately labelled steady-state Wasm results are generated back-to-back
-on a controlled Namespace runner during release preparation. Direct rankings cover only ordinary independent-puzzle workloads with the same first-solution
-outcome and timing boundary. Prepared comparisons may exclude conversion to a library's natural
-input representation, but not puzzle-specific topology or search-state construction. Fixed-puzzle
-compilation is an unranked sudoku-dlx capability, and native/Wasm results remain separately labelled.
-See [PERFORMANCE.md](./PERFORMANCE.md) for the complete allowed-cache and timing contract.
+Competitive results are generated on a controlled Namespace runner during release preparation.
+Direct rankings cover npm packages that solve ordinary independent puzzles with the same
+first-solution outcome and timing boundary, regardless of implementation language. Prepared
+comparisons may exclude conversion to a library's natural input representation, but not
+puzzle-specific topology or search-state construction. Fixed-puzzle compilation remains an
+unranked sudoku-dlx capability. See [PERFORMANCE.md](./PERFORMANCE.md) for the complete allowed-cache
+and timing contract.
 
 Every measurement sample processes a complete corpus pass, and throughput is computed from total
 puzzles divided by total elapsed time. Ranked passes deterministically relabel puzzle digits and use
@@ -89,17 +87,11 @@ provenance, and supported solve modes must be explicit so comparisons remain rep
 honest. JSON reports carry the runtime, hardware, commit, lockfile hash, timing configuration,
 dataset semantics, and solver versions needed to reproduce a run.
 
-Legacy packages and historical Node addons are optional and may be skipped with an explicit reason.
-Every in-process third-party solver is exact-pinned so the installed implementation cannot drift
-away from the version recorded by its adapter and benchmark report; update the dependency, adapter
-metadata, and lockfile together.
-
-Pinned native executable comparisons and external corpora are a separate opt-in workflow under
-`benchmark/competition/`; they are never vendored or mixed into the in-process JavaScript tables.
-That workflow ranks only the shared full-process boundary: one fresh, single-threaded process per
-complete canonical corpus pass, including startup, corpus input, solving, and solution-file output.
-Rates use total puzzles across all measured process runs divided by total elapsed time. Upstream
-internal timers with different boundaries are retained only as diagnostics.
+Legacy packages are optional and may be skipped with an explicit reason. Every third-party solver
+is an exact-pinned npm development dependency, so the installed implementation cannot drift away
+from the version recorded by its adapter and benchmark report; update the dependency, adapter
+metadata, and lockfile together. The benchmark suite does not clone or build standalone third-party
+solver repositories.
 
 ## Dependency maintenance
 

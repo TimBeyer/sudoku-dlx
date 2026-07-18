@@ -1,7 +1,5 @@
 /node_modules
-/.benchmark-cache
 /.nyc_output
-/benchmark/native/node_modules
 /.c8_output
 /coverage
 /built
