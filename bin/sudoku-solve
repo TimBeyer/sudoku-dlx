@@ -1,6 +1,25 @@
 #!/usr/bin/env node
 
-const { solveString, printBoard } = require('../built/lib/index')
+import { printBoard, solveString } from '../built/lib/index.js'
+
 const sudoku = process.argv[2]
 
-console.log(printBoard(solveString(sudoku)[0]))
+if (!sudoku) {
+  console.error('Usage: sudoku-solve <81-cell sudoku>')
+  process.exitCode = 1
+} else {
+  try {
+    const solutions = solveString(sudoku)
+
+    if (solutions.length === 0) {
+      console.error('No solution found')
+      process.exitCode = 1
+    } else {
+      console.log(printBoard(solutions[0]))
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`Unable to solve Sudoku: ${message}`)
+    process.exitCode = 1
+  }
+}

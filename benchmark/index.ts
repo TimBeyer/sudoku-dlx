@@ -1,80 +1,107 @@
-import * as Benchmark from 'benchmark'
+import { writeFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
+import { getGroup } from './config/groups.js'
+import { getAvailableGroups, runBenchmarkGroup } from './runner.js'
+import type { BenchmarkOptions, BenchmarkReport } from './types.js'
 
-import { solveString, solveCells, parseStringFormat, printBoard } from '../index'
-import { times } from '../lib';
+export type {
+  BenchmarkEnvironment,
+  BenchmarkOptions,
+  BenchmarkReport,
+  BenchmarkResult,
+  BenchmarkSection,
+  BenchmarkSemantics,
+  DatasetDefinition,
+  SolverMetadata
+} from './types.js'
 
-import * as sudokuC from 'sudoku-c'
-import * as klsudoku from 'klsudoku'
-import * as dancingLinksAlgoritm from 'dancing-links-algorithm'
-import * as sudokuSolver from '@mattflow/sudoku-solver'
-import * as sudoku_solver from 'sudoku_solver'
-import * as SudokuSolverJs from 'sudoku-solver-js'
-
-const SHOW_PROGRESS = process.env['SHOW_PROGRESS'] && process.env['SHOW_PROGRESS'] !== "0"
-
-function runBenchmark (name: string, sudokuString: string) {
-  const GRID_SIZE = 9
-  const sudokuStringWithZeros = sudokuString.replace(/\./g, '0')
-  const cells = parseStringFormat(sudokuString)
-  const sudokuSolverJsSolver = new SudokuSolverJs()
-
-  const simpleArrayCells = times(GRID_SIZE * GRID_SIZE, 0)
-  for (const cell of cells) {
-    const index = cell.row * GRID_SIZE + cell.col
-    simpleArrayCells[index] = cell.number
-  }
-
-  console.log(`Benchmark: ${name} \n`)
-  console.log(printBoard(cells))
-  console.log('\n')
-
-  const suite = new Benchmark.Suite()
-
-  suite.add('sudoku-dlx from string (JS)', function () {
-    solveString(sudokuString)
-  })
-  .add('sudoku-dlx from cells (JS)', function () {
-    solveCells(cells)
-  })
-  .add('klsudoku from string (C++)', function () {
-    klsudoku.solve(sudokuString)
-  })
-  .add('dancing-links-algorithm from string (JS)', function () {
-    dancingLinksAlgoritm.solve(sudokuStringWithZeros)
-  })
-  .add('@mattflow/sudoku-solver from string (JS)', function () {
-    sudokuSolver(sudokuStringWithZeros)
-  })
-  .add('sudoku-solver-js from string (JS)', function () {
-    sudokuSolverJsSolver.solve(sudokuString)
-  })
-  .add('sudoku_solver from string (JS)', function () {
-    let grid = new sudoku_solver.Grid(sudokuString)
-    // Creates a Solver
-    let solver = new sudoku_solver.Solver()
-    solver.solve(grid)
-  })
-  .add('sudoku-c from array (C)', function () {
-    // This solver mutates the output
-    // so need the cloning overhead sadly
-    sudokuC.solve([...simpleArrayCells])
-  })
-  .on('cycle', function (event) {
-    if (SHOW_PROGRESS) {
-      console.log(String(event.target))
-    }
-  })
-  .on('complete', function () {
-    const results = this.map((res) => {
-      return res
-    }).sort((a, b) => {
-      return b.hz - a.hz
-    }).map((r) => String(r)).join('\n')
-
-    console.log(results)
-    console.log('\nFastest is ' + this.filter('fastest').map('name') + '\n\n')
-  }).run()
+interface ParsedOptions extends BenchmarkOptions {
+  readonly help: boolean
 }
 
-runBenchmark('A solution to the sudoku (simple)', '.....12..1..7...45...43.7...9...63...5.8.7.2...62...9...3.19...97...4..6..25.....')  
-runBenchmark('A solution to the sudoku (hard)', '..............3.85..1.2.......5.7.....4...1...9.......5......73..2.1........4...9')  
+function parseArgs(args = process.argv.slice(2)): ParsedOptions {
+  const namedGroup = valueAfterPrefix(args, '--group=')
+  const selectedFlag = ['internal', 'competitive', 'legacy', 'comprehensive', 'native'].find(
+    group => args.includes(`--${group}`)
+  )
+  const group = namedGroup ?? selectedFlag ?? 'internal'
+  const jsonFlag = args.find(argument => argument === '--json' || argument.startsWith('--json='))
+  const positionalJsonFile =
+    jsonFlag === '--json' ? args.find(argument => !argument.startsWith('-')) : undefined
+
+  return {
+    group,
+    jsonOutput: jsonFlag !== undefined,
+    jsonFile: jsonFlag?.startsWith('--json=')
+      ? jsonFlag.slice('--json='.length)
+      : positionalJsonFile,
+    quiet: args.includes('--quiet'),
+    timeMs: positiveNumber(valueAfterPrefix(args, '--time='), 500, '--time'),
+    warmupMs: positiveNumber(valueAfterPrefix(args, '--warmup='), 100, '--warmup'),
+    help: args.includes('--help') || args.includes('-h')
+  }
+}
+
+function valueAfterPrefix(args: readonly string[], prefix: string): string | undefined {
+  return args.find(argument => argument.startsWith(prefix))?.slice(prefix.length)
+}
+
+function positiveNumber(value: string | undefined, fallback: number, flag: string): number {
+  if (value === undefined) return fallback
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${flag} must be positive`)
+  return parsed
+}
+
+function showUsage(): void {
+  console.log(`Usage: node built/dev/benchmark/index.js [group] [options]
+
+Groups:
+${getAvailableGroups()
+  .map(group => `  --${group.padEnd(13)} ${getGroup(group)?.description ?? ''}`)
+  .join('\n')}
+
+Options:
+  --group=<name>      Select a group without its convenience flag
+  --json[=<file>]     Write the schema-versioned report as JSON
+  --quiet             Suppress progress output (JSON remains on stdout)
+  --time=<ms>         Measurement time per task (default: 500)
+  --warmup=<ms>       Warmup time per task (default: 100)
+  --help              Show this help
+
+End-to-end cases include input conversion and public API setup. Prepared cases
+move input conversion or fixed-puzzle compilation outside the timed operation.`)
+}
+
+function outputReport(report: BenchmarkReport, options: BenchmarkOptions): void {
+  if (!options.jsonOutput) return
+  const json = `${JSON.stringify(report, null, 2)}\n`
+  if (options.jsonFile) {
+    writeFileSync(options.jsonFile, json)
+    if (!options.quiet) console.log(`Benchmark report written to ${options.jsonFile}`)
+  } else {
+    process.stdout.write(json)
+  }
+}
+
+export async function main(args = process.argv.slice(2)): Promise<void> {
+  const options = parseArgs(args)
+  if (options.help) {
+    showUsage()
+    return
+  }
+
+  const report = await runBenchmarkGroup(options)
+  outputReport(report, options)
+}
+
+const executedDirectly =
+  process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])
+
+if (executedDirectly) {
+  main().catch(error => {
+    console.error(error instanceof Error ? error.message : error)
+    process.exitCode = 1
+  })
+}

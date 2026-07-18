@@ -1,11 +1,28 @@
-benchmark/
-lib/
-index.ts
-test/
-tsconfig.dev.json
-tsconfig.release.json
-tslint.json
-.circleci
-.nyc_output/
-profile.cpuprofile
-coverage.lcov
+# Source and test files
+/lib/
+/index.ts
+/test/
+/benchmark/
+/scripts/
+
+# Development configuration
+/tsconfig*.json
+/eslint.config.js
+/commitlint.config.js
+/.prettierrc*
+/.release-it.json
+/.github/
+
+# Compiled development-only files
+/built/dev/
+
+# Development artifacts
+/.c8_output/
+/coverage/
+/profile.cpuprofile
+
+# Dependency and package-manager artifacts
+/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

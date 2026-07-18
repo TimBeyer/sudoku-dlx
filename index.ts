@@ -1,35 +1,87 @@
-import { SudokuCell, generateConstraints, parseStringFormat } from './lib'
-import { findRaw } from 'dancing-links'
+import { DancingLinks, type ConstraintRow, type Result } from 'dancing-links'
+import {
+  createNumericConstraintsFromCells,
+  createNumericConstraintsFromString,
+  decodeStandardCandidate,
+  type SudokuCell
+} from './lib/index.js'
 
 const FIELD_SIZE = 9
+const TOTAL_CONSTRAINTS = FIELD_SIZE * FIELD_SIZE * 4
+const dancingLinks = new DancingLinks<number>()
 
-export function solveString (sudoku: string, all = false): SudokuCell[][] {
-  const totalConstraints = (FIELD_SIZE * FIELD_SIZE) * 4
-  const cells = parseStringFormat(sudoku, FIELD_SIZE)
-  const constraints = generateConstraints(cells, FIELD_SIZE)
-
-  const result = findRaw({
-    numPrimary: totalConstraints,
-    numSecondary: 0,
-    numSolutions: all ? Infinity : 1,
-    rows: constraints
-  })
-
-  return result.map((r) => r.map((s) => s.data))
+export interface CompiledSudoku {
+  solve(all?: boolean): SudokuCell[][]
 }
 
-export function solveCells (sudoku: SudokuCell[], all = false): SudokuCell[][] {
-  const totalConstraints = (FIELD_SIZE * FIELD_SIZE) * 4
-  const constraints = generateConstraints(sudoku, FIELD_SIZE)
+function extractSolutions(results: Result<number>[][]): SudokuCell[][] {
+  const solutions = new Array<SudokuCell[]>(results.length)
 
-  const result = findRaw({
-    numPrimary: totalConstraints,
-    numSecondary: 0,
-    numSolutions: all ? Infinity : 1,
-    rows: constraints
-  })
+  for (let solutionIndex = 0; solutionIndex < results.length; solutionIndex++) {
+    const result = results[solutionIndex]
+    const solution = new Array<SudokuCell>(result.length)
 
-  return result.map((r) => r.map((s) => s.data))
+    for (let resultIndex = 0; resultIndex < result.length; resultIndex++) {
+      solution[resultIndex] = decodeStandardCandidate(result[resultIndex].data)
+    }
+
+    solutions[solutionIndex] = solution
+  }
+
+  return solutions
 }
 
-export { SudokuCell, parseStringFormat, generateConstraints, printBoard } from './lib/index'
+function solveConstraints(constraints: ConstraintRow<number>[], all: boolean): SudokuCell[][] {
+  const solver = dancingLinks.createSolver({ columns: TOTAL_CONSTRAINTS })
+  solver.addRows(constraints)
+
+  return extractSolutions(all ? solver.findAll() : solver.findOne())
+}
+
+function compileConstraints(constraints: ConstraintRow<number>[]): CompiledSudoku {
+  const template = dancingLinks.createSolverTemplate({ columns: TOTAL_CONSTRAINTS })
+  const ownedConstraints = new Array<ConstraintRow<number>>(constraints.length)
+
+  // SolverTemplate snapshots row topology by replacing each row's column array.
+  // Detach the row objects from the module-level candidate cache before handing
+  // them over. The template itself copies each coveredColumns array, so keeping
+  // that reference here avoids making the same copy twice.
+  for (let index = 0; index < constraints.length; index++) {
+    const constraint = constraints[index]
+    ownedConstraints[index] = {
+      data: constraint.data,
+      coveredColumns: constraint.coveredColumns
+    }
+  }
+
+  template.addRows(ownedConstraints)
+
+  // Creating the solver eagerly snapshots and compiles the fixed matrix. Each
+  // subsequent search clones only the mutable link buffers.
+  const solver = template.createSolver()
+
+  return {
+    solve(all = false): SudokuCell[][] {
+      return extractSolutions(all ? solver.findAll() : solver.findOne())
+    }
+  }
+}
+
+export function solveString(sudoku: string, all = false): SudokuCell[][] {
+  return solveConstraints(createNumericConstraintsFromString(sudoku), all)
+}
+
+export function solveCells(sudoku: SudokuCell[], all = false): SudokuCell[][] {
+  return solveConstraints(createNumericConstraintsFromCells(sudoku), all)
+}
+
+export function compileString(sudoku: string): CompiledSudoku {
+  return compileConstraints(createNumericConstraintsFromString(sudoku))
+}
+
+export function compileCells(sudoku: SudokuCell[]): CompiledSudoku {
+  return compileConstraints(createNumericConstraintsFromCells(sudoku))
+}
+
+export { generateConstraints, parseStringFormat, printBoard } from './lib/index.js'
+export type { SudokuCell } from './lib/index.js'
