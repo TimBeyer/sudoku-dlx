@@ -172,8 +172,89 @@ GitHub-hosted CPU measurements are not presented as release performance.
 
 ## Benchmarks
 
-Release benchmark tables are generated from a validated schema-v1 report on controlled hardware.
-Run `npm run update-benchmark-docs:dry-run` to preview the generated section locally.
+Benchmarks solve one puzzle per operation, rotate deterministic corpora, and validate every solver result before timing. End-to-end cases include public input conversion; prepared cases move conversion or fixed-puzzle compilation outside the timed operation.
+
+### Easy puzzle — end-to-end public API
+
+Dataset: `easy` (1 puzzle); semantics: `end-to-end`.
+
+| Solver                 | Puzzles/sec |          Relative | Margin |
+| ---------------------- | ----------: | ----------------: | -----: |
+| sudoku-dlx solveString |   45,503.76 | **1.00× fastest** | ±0.16% |
+| sudoku-dlx solveCells  |    44,234.8 |             0.97× | ±0.12% |
+| @algorithm.ts/sudoku   |   20,969.94 |             0.46× | ±0.09% |
+| fast-sudoku-solver     |   11,075.34 |             0.24× | ±0.21% |
+
+### Hard puzzle — end-to-end public API
+
+Dataset: `hard` (1 puzzle); semantics: `end-to-end`.
+
+| Solver                 | Puzzles/sec |          Relative | Margin |
+| ---------------------- | ----------: | ----------------: | -----: |
+| sudoku-dlx solveString |   37,999.85 | **1.00× fastest** | ±0.11% |
+| sudoku-dlx solveCells  |   36,903.51 |             0.97× | ±0.12% |
+| @algorithm.ts/sudoku   |   20,568.42 |             0.54× | ±0.07% |
+| fast-sudoku-solver     |        10.8 |             0.00× | ±0.59% |
+
+### Easy + hard rotating corpus — end-to-end public API
+
+Dataset: `rotating` (8 puzzles); semantics: `end-to-end`.
+
+| Solver                 | Puzzles/sec |          Relative |  Margin |
+| ---------------------- | ----------: | ----------------: | ------: |
+| sudoku-dlx solveString |   39,075.62 | **1.00× fastest** |  ±0.16% |
+| sudoku-dlx solveCells  |   37,696.18 |             0.96× |  ±0.18% |
+| @algorithm.ts/sudoku   |   20,941.59 |             0.54× |  ±0.09% |
+| fast-sudoku-solver     |    4,460.66 |             0.11× | ±25.06% |
+
+### Easy fixed puzzle — prepared input
+
+Dataset: `easy` (1 puzzle); semantics: `prepared`.
+
+| Solver                           | Puzzles/sec |          Relative | Margin |
+| -------------------------------- | ----------: | ----------------: | -----: |
+| sudoku-dlx compileString + solve |   96,457.58 | **1.00× fastest** | ±0.09% |
+| sudoku-dlx compileCells + solve  |    96,205.3 |             1.00× | ±0.09% |
+| sudoku-dlx solveCells            |   43,314.55 |             0.45× | ±0.11% |
+| @algorithm.ts/sudoku             |   21,557.38 |             0.22× | ±0.08% |
+| fast-sudoku-solver               |   10,766.83 |             0.11× | ±0.14% |
+
+### Hard fixed puzzle — prepared input
+
+Dataset: `hard` (1 puzzle); semantics: `prepared`.
+
+| Solver                           | Puzzles/sec |          Relative | Margin |
+| -------------------------------- | ----------: | ----------------: | -----: |
+| sudoku-dlx compileCells + solve  |   81,626.02 | **1.00× fastest** | ±0.10% |
+| sudoku-dlx compileString + solve |    80,070.9 |             0.98× | ±0.11% |
+| sudoku-dlx solveCells            |   36,814.77 |             0.45× | ±0.11% |
+| @algorithm.ts/sudoku             |   20,990.99 |             0.26× | ±0.06% |
+| fast-sudoku-solver               |          11 |             0.00× | ±0.65% |
+
+### Easy + hard rotating corpus — prepared input
+
+Dataset: `rotating` (8 puzzles); semantics: `prepared`.
+
+| Solver                           | Puzzles/sec |          Relative |  Margin |
+| -------------------------------- | ----------: | ----------------: | ------: |
+| sudoku-dlx compileString + solve |   81,091.29 | **1.00× fastest** |  ±0.14% |
+| sudoku-dlx compileCells + solve  |   80,491.03 |             0.99× |  ±0.15% |
+| sudoku-dlx solveCells            |   37,673.15 |             0.46× |  ±0.17% |
+| @algorithm.ts/sudoku             |   21,211.75 |             0.26× |  ±0.11% |
+| fast-sudoku-solver               |    5,051.19 |             0.06× | ±25.39% |
+
+### Reproduction metadata
+
+- Runtime: node v24.18.0 (Node 24.18.0)
+- CPU: AMD EPYC; 4 logical CPUs
+- Platform: linux 7.1.3, x64
+- Repository commit: `f5c84478b18b66f4bdb6eab762a4136bb9a7c889`
+- Lockfile SHA-256: `1d7359304abc544cdbe626a8c08f0fe314890f7b0ef7159d8b93077ca38ecccf`
+- Timing: 100 ms warmup and 500 ms measurement per task
+- Solvers: sudoku-dlx solveString workspace (MIT); sudoku-dlx solveCells workspace (MIT); fast-sudoku-solver 3.0.3 (MIT); @algorithm.ts/sudoku 4.0.4 (MIT); sudoku-dlx compileString + solve workspace (MIT); sudoku-dlx compileCells + solve workspace (MIT)
+- Generated: 2026-07-18T16:29:38.020Z
+
+Large native and third-party corpora are opt-in and are not mixed into these in-process JavaScript tables.
 
 ## License
 
