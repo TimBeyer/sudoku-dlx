@@ -1,0 +1,251 @@
+name: Release
+
+on:
+  push:
+    branches: [main, master]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  should-run:
+    if: "!contains(github.event.head_commit.message, 'chore: release')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.release-check.outputs.value }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check for releasable commits
+        id: release-check
+        shell: bash
+        run: |
+          for tag in $(git tag --list 'v*' --sort=-v:refname); do
+            commit=$(git rev-list -n 1 "$tag")
+            parent=$(git rev-parse "$commit^" 2>/dev/null || true)
+            subject=$(git show -s --format='%s' "$commit")
+            if [[ "$parent" == "$GITHUB_SHA" && "$subject" == "chore: release v${tag#v}" ]]; then
+              echo "value=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          latest_tag=$(git describe --tags --match='v*' --abbrev=0 2>/dev/null || true)
+          if [[ -z "$latest_tag" ]]; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          messages=$(git log --format='%s%n%b' "$latest_tag..HEAD")
+          if grep -Eq '^((feat|fix|perf|revert)(\([^)]*\))?!?:|[a-z]+(\([^)]*\))?!:|BREAKING[ -]CHANGE:)' <<< "$messages"; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    needs: should-run
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lint.yml
+
+  test:
+    needs: should-run
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
+  build:
+    needs: should-run
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build.yml
+
+  benchmark-docs:
+    if: needs.should-run.outputs.release == 'true'
+    needs: [should-run, lint, test, build]
+    runs-on: namespace-profile-default
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Update competitive benchmark documentation
+        run: npm run update-benchmark-docs -- --quiet
+
+      - name: Upload benchmark documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-benchmark-docs-${{ github.sha }}
+          path: README.md
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: benchmark-docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Detect fresh or resumable release
+        id: release-state
+        shell: bash
+        run: |
+          git fetch origin --tags
+
+          for tag in $(git tag --list 'v*' --sort=-v:refname); do
+            commit=$(git rev-list -n 1 "$tag")
+            parent=$(git rev-parse "$commit^" 2>/dev/null || true)
+            subject=$(git show -s --format='%s' "$commit")
+            if [[ "$parent" == "$GITHUB_SHA" && "$subject" == "chore: release v${tag#v}" ]]; then
+              git checkout --detach "$commit"
+              echo "mode=resume" >> "$GITHUB_OUTPUT"
+              echo "tag=$tag" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          remote_head=$(git rev-parse "origin/$GITHUB_REF_NAME")
+          if [[ "$GITHUB_SHA" != "$remote_head" ]]; then
+            echo "Refusing to release stale commit $GITHUB_SHA; branch is now $remote_head" >&2
+            exit 1
+          fi
+          echo "mode=fresh" >> "$GITHUB_OUTPUT"
+
+      - name: Download benchmark documentation
+        if: steps.release-state.outputs.mode == 'fresh'
+        uses: actions/download-artifact@v4
+        with:
+          name: release-benchmark-docs-${{ github.sha }}
+          path: ${{ runner.temp }}/release-benchmark-docs
+
+      - name: Apply benchmark documentation
+        if: steps.release-state.outputs.mode == 'fresh'
+        run: cp "$RUNNER_TEMP/release-benchmark-docs/README.md" README.md
+
+      - name: Verify benchmark documentation scope
+        if: steps.release-state.outputs.mode == 'fresh'
+        run: git diff --exit-code -- . ':(exclude)README.md'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@11.10.1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Select release increment
+        if: steps.release-state.outputs.mode == 'fresh'
+        id: release-increment
+        shell: bash
+        run: |
+          if git tag --list 'v*' | grep -q .; then
+            echo "value=" >> "$GITHUB_OUTPUT"
+          else
+            # npm 1.0.0 predates this repository's tags. Bootstrap the breaking
+            # ESM/Node 22 release as 2.0.0 and record the exact published baseline;
+            # later releases use Conventional Commits.
+            legacy_release=4267ace422b9c89d56f057f7f4005b8b8a1ebcea
+            git merge-base --is-ancestor "$legacy_release" HEAD
+            git tag --annotate --message "Release v1.0.0" v1.0.0 "$legacy_release"
+            echo "value=major" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push release state
+        if: steps.release-state.outputs.mode == 'fresh'
+        shell: bash
+        run: |
+          args=(--ci --no-npm.publish --no-github.release --git.requireCleanWorkingDir=false '--hooks.after:bump=npm run format')
+          if [[ -n "$RELEASE_INCREMENT" ]]; then
+            args=("$RELEASE_INCREMENT" "${args[@]}")
+          fi
+          npm run release -- "${args[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_INCREMENT: ${{ steps.release-increment.outputs.value }}
+
+      - name: Read release metadata
+        id: release-metadata
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          name=$(node -p "require('./package.json').name")
+          tag="v$version"
+          tag_commit=$(git rev-list -n 1 "$tag")
+          head_commit=$(git rev-parse HEAD)
+          if [[ "$tag_commit" != "$head_commit" ]]; then
+            echo "Release tag $tag does not point at HEAD" >&2
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Verify versioned package
+        run: npm run check:package
+
+      - name: Publish package through trusted OIDC
+        shell: bash
+        run: |
+          published=$(npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version 2>/dev/null || true)
+          if [[ "$published" == "$PACKAGE_VERSION" ]]; then
+            echo "$PACKAGE_NAME@$PACKAGE_VERSION is already published; continuing recovery."
+          else
+            npm publish --access public --provenance
+          fi
+        env:
+          PACKAGE_NAME: ${{ steps.release-metadata.outputs.name }}
+          PACKAGE_VERSION: ${{ steps.release-metadata.outputs.version }}
+
+      - name: Create GitHub release
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "$RELEASE_TAG already has a GitHub release; nothing to do."
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "Release $RELEASE_TAG"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release-metadata.outputs.tag }}

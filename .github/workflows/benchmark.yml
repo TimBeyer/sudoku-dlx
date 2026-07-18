@@ -1,0 +1,149 @@
+name: Benchmark
+
+on:
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: namespace-profile-default
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [node-22, node-24, node-26, bun-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Parse runtime version
+        id: version
+        shell: bash
+        run: echo "value=${RUNTIME#*-}" >> "$GITHUB_OUTPUT"
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+
+      - name: Set up Node.js
+        if: startsWith(matrix.runtime, 'node-')
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.version.outputs.value }}
+          cache: npm
+
+      - name: Set up Node.js for Bun tooling
+        if: startsWith(matrix.runtime, 'bun-')
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Bun
+        if: startsWith(matrix.runtime, 'bun-')
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.version.outputs.value }}
+
+      - name: Find merge base
+        id: merge-base
+        shell: bash
+        run: |
+          git fetch origin "${{ github.base_ref }}"
+          merge_base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
+          echo "commit=$merge_base" >> "$GITHUB_OUTPUT"
+
+      - name: Benchmark merge-base
+        id: baseline
+        shell: bash
+        run: |
+          baseline="${{ steps.merge-base.outputs.commit }}"
+          output="baseline-results-${{ matrix.runtime }}.json"
+          error="baseline-error-${{ matrix.runtime }}.log"
+
+          if git show "$baseline:package.json" | grep -q '"benchmark:json"'; then
+            git checkout --force "$baseline"
+            npm ci
+
+            if [[ "${{ matrix.runtime }}" == bun-* ]]; then
+              command=(bun run --bun benchmark:json -- "$output")
+            else
+              command=(npm run benchmark:json -- "$output")
+            fi
+
+            if ! timeout 900s "${command[@]}" 2>"$error"; then
+              echo '[]' > "$output"
+              echo "available=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "available=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo '[]' > "$output"
+            echo "benchmark:json is unavailable at merge-base $baseline" > "$error"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Benchmark pull request
+        shell: bash
+        run: |
+          git checkout --force "${{ github.sha }}"
+          npm ci
+
+          output="pr-results-${{ matrix.runtime }}.json"
+          error="pr-error-${{ matrix.runtime }}.log"
+          if [[ "${{ matrix.runtime }}" == bun-* ]]; then
+            command=(bun run --bun benchmark:json -- "$output")
+          else
+            command=(npm run benchmark:json -- "$output")
+          fi
+
+          if ! timeout 900s "${command[@]}" 2>"$error"; then
+            cat "$error" >&2
+            exit 1
+          fi
+
+      - name: Compare benchmark results
+        shell: bash
+        run: |
+          if [[ "${{ steps.baseline.outputs.available }}" == "true" ]]; then
+            npm run compare-benchmarks -- \
+              "baseline-results-${{ matrix.runtime }}.json" \
+              "pr-results-${{ matrix.runtime }}.json" \
+              > "comparison-${{ matrix.runtime }}.md"
+          else
+            {
+              echo "No schema-v1 benchmark is available at the merge base."
+              echo
+              echo "The pull-request report is attached as an artifact and will become the baseline after merge."
+            } > "comparison-${{ matrix.runtime }}.md"
+          fi
+
+          {
+            echo "### ${{ matrix.runtime }}"
+            echo
+            cat "comparison-${{ matrix.runtime }}.md"
+            echo
+          } > "final-comparison-${{ matrix.runtime }}.md"
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ matrix.runtime }}
+          path: |
+            baseline-results-${{ matrix.runtime }}.json
+            pr-results-${{ matrix.runtime }}.json
+            baseline-error-${{ matrix.runtime }}.log
+            pr-error-${{ matrix.runtime }}.log
+            final-comparison-${{ matrix.runtime }}.md
+          if-no-files-found: error
+          retention-days: 14
