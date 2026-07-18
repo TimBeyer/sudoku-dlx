@@ -5,13 +5,18 @@ import { getGroup } from './config/groups.js'
 import { getAvailableGroups, runBenchmarkGroup } from './runner.js'
 import type { BenchmarkOptions, BenchmarkReport } from './types.js'
 
+export { calculateCorpusThroughput, createIsomorphicCorpus } from './runner.js'
+
 export type {
   BenchmarkEnvironment,
+  BenchmarkComparison,
+  BenchmarkInputSchedule,
   BenchmarkOptions,
   BenchmarkReport,
   BenchmarkResult,
   BenchmarkSection,
   BenchmarkSemantics,
+  BenchmarkTier,
   DatasetDefinition,
   SolverMetadata
 } from './types.js'
@@ -22,9 +27,7 @@ interface ParsedOptions extends BenchmarkOptions {
 
 function parseArgs(args = process.argv.slice(2)): ParsedOptions {
   const namedGroup = valueAfterPrefix(args, '--group=')
-  const selectedFlag = ['internal', 'competitive', 'legacy', 'comprehensive', 'native'].find(
-    group => args.includes(`--${group}`)
-  )
+  const selectedFlag = getAvailableGroups().find(group => args.includes(`--${group}`))
   const group = namedGroup ?? selectedFlag ?? 'internal'
   const jsonFlag = args.find(argument => argument === '--json' || argument.startsWith('--json='))
   const positionalJsonFile =
@@ -70,8 +73,10 @@ Options:
   --warmup=<ms>       Warmup time per task (default: 100)
   --help              Show this help
 
-End-to-end cases include input conversion and public API setup. Prepared cases
-move input conversion or fixed-puzzle compilation outside the timed operation.`)
+Every timed operation solves one complete measured corpus. Ranked end-to-end cases
+measure string-to-first-solution; ranked prepared cases move only input parsing out
+of timing. Exact-puzzle compilation is reported separately and is never ranked
+against solvers without the same capability.`)
 }
 
 function outputReport(report: BenchmarkReport, options: BenchmarkOptions): void {

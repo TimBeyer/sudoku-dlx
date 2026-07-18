@@ -1,5 +1,12 @@
 export type BenchmarkSemantics = 'end-to-end' | 'prepared'
 
+export type BenchmarkTier = 'end-to-end' | 'prepared-input' | 'compiled-replay'
+
+export type BenchmarkComparison = 'ranked' | 'capability-only' | 'diagnostic-only'
+
+export type BenchmarkInputSchedule =
+  'fresh-deterministic-digit-isomorph-v1-per-pass' | 'fixed-corpus-replay'
+
 export interface DatasetDefinition {
   readonly id: string
   readonly name: string
@@ -17,7 +24,7 @@ export interface SolverMetadata {
   readonly source?: string
   readonly sourceCommit?: string
   readonly license: string
-  readonly runtime: 'javascript' | 'native-addon'
+  readonly runtime: 'javascript' | 'wasm' | 'native-addon'
   readonly optional: boolean
 }
 
@@ -44,7 +51,10 @@ export interface BenchmarkCase {
   readonly id: string
   readonly name: string
   readonly datasetId: string
+  readonly warmupDatasetId?: string
   readonly semantics: BenchmarkSemantics
+  readonly tier: BenchmarkTier
+  readonly comparison: BenchmarkComparison
 }
 
 export interface BenchmarkGroup {
@@ -67,7 +77,10 @@ export interface BenchmarkResult {
   readonly name: string
   readonly opsPerSec: number
   readonly margin: number
+  /** Number of complete corpus passes measured by the timing harness. */
   readonly runs: number
+  readonly totalPuzzles: number
+  readonly elapsedMs: number
   readonly unit: 'puzzles/sec'
 }
 
@@ -75,8 +88,15 @@ export interface BenchmarkSection {
   readonly caseId: string
   readonly benchmarkName: string
   readonly datasetId: string
+  readonly warmupDatasetId: string
   readonly semantics: BenchmarkSemantics
+  readonly tier: BenchmarkTier
+  readonly comparison: BenchmarkComparison
   readonly puzzleCount: number
+  readonly warmupPuzzleCount: number
+  readonly timedOperation: 'complete-corpus-pass'
+  readonly inputSchedule: BenchmarkInputSchedule
+  readonly executionOrder: readonly string[]
   readonly results: readonly BenchmarkResult[]
 }
 
@@ -96,19 +116,25 @@ export interface BenchmarkEnvironment {
   readonly cpu: string
   readonly logicalCpus: number
   readonly gitSha?: string
+  readonly gitDirty?: boolean
   readonly lockfileSha256?: string
 }
 
 export interface BenchmarkReport {
-  readonly schemaVersion: 1
+  readonly schemaVersion: 2
   readonly generatedAt: string
   readonly group: string
   readonly environment: BenchmarkEnvironment
   readonly configuration: {
     readonly timeMs: number
     readonly warmupMs: number
-    readonly order: 'deterministic-round-robin'
-    readonly validation: 'all-puzzles-before-timing'
+    readonly order: 'sequential-case-rotated'
+    readonly taskIsolation: 'one-solver-per-benchmark-instance'
+    readonly timedOperation: 'complete-corpus-pass'
+    readonly rate: 'total-puzzles-per-total-elapsed-time'
+    readonly warmup: 'explicit-or-derived-disjoint-corpus'
+    readonly validation: 'warmup-before-and-last-timed-pass-after'
+    readonly rankedInputSchedule: 'fresh-deterministic-digit-isomorph-v1-per-pass'
   }
   readonly datasets: readonly Omit<DatasetDefinition, 'puzzles'>[]
   readonly solvers: readonly SolverMetadata[]

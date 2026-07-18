@@ -21,6 +21,9 @@ repository scripts compile beneath `built/dev/` and are not published.
 - `npm run format` applies Prettier.
 - `npm run benchmark` runs internal regression cases.
 - `npm run benchmark:competitive` runs maintained external solver comparisons.
+- `npm run benchmark:wasm` runs the separately labelled steady-state Wasm comparison.
+- `npm run benchmark:corpus:verify` regenerates and verifies the representative measured and warmup
+  corpora without changing the checked-in data.
 - `npm run check` performs the standard pre-commit verification.
 
 ## Engineering rules
@@ -33,8 +36,13 @@ repository scripts compile beneath `built/dev/` and are not published.
 - Preserve the distinction between first-solution and all-solutions behavior and return fresh,
   caller-owned cells.
 - Add behavioral tests for invalid, unsatisfiable, ambiguous, repeated, and mutation-prone inputs.
-- Run same-machine, same-runtime benchmarks before and after solver-path changes. Validate adapters
-  before timing and do not compare incompatible prepared and end-to-end boundaries.
+- Run same-machine, same-runtime benchmarks before and after solver-path changes. Direct comparisons
+  must solve the same complete corpus with first-solution semantics; validate only the disjoint
+  warmup corpus before timing and validate captured measured outputs after timing.
+- Give each ranked pass fresh exact puzzle strings and fresh prepared objects outside timing so
+  exact-input memoization and input mutation cannot benefit from benchmark repetition.
+- Prepared comparisons may exclude natural input conversion, but not puzzle-specific solver setup.
+  Keep exact-puzzle compilation unranked and alternative runtimes in separately labelled groups.
 - Keep the library, executable, declarations, README examples, and benchmark adapters consistent.
 - Use Conventional Commits and make breaking changes explicit.
 

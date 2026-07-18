@@ -15,6 +15,15 @@ export const TDOKU: NativeSourcePin = {
     'https://github.com/t-dillon/tdoku/blob/af426180dc53aef89b82868e7b3fdfcf42165654/LICENSE'
 }
 
+export const AUTORESEARCH_SUDOKU: NativeSourcePin = {
+  id: 'autoresearch-sudoku',
+  repository: 'https://github.com/Rkcr7/autoresearch-sudoku.git',
+  commit: '6572d08a00a1fb6938b0cc493d22772f8f903fed',
+  license: 'MIT',
+  licenseUrl:
+    'https://github.com/Rkcr7/autoresearch-sudoku/blob/6572d08a00a1fb6938b0cc493d22772f8f903fed/LICENSE'
+}
+
 export const SCHOKU: NativeSourcePin = {
   id: 'schoku',
   repository: 'https://github.com/Mart1nSchulz/Schoku.git',
@@ -31,4 +40,4 @@ export const TDOKU_DATA = {
     'https://github.com/t-dillon/tdoku/blob/af426180dc53aef89b82868e7b3fdfcf42165654/benchmarks/README.md'
 } as const
 
-export const NATIVE_COMPETITION_PINS = [TDOKU, SCHOKU] as const
+export const NATIVE_COMPETITION_PINS = [AUTORESEARCH_SUDOKU, TDOKU, SCHOKU] as const

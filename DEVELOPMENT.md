@@ -39,11 +39,15 @@ npm run format                 # Format supported repository files
 npm run format:check           # Check formatting without writing
 npm run check                  # Format check, lint, unit tests, and production build
 npm run benchmark              # Run internal regression benchmarks
+npm run benchmark:json -- report.json
 npm run benchmark:competitive  # Compare with maintained JavaScript solvers
+npm run benchmark:wasm         # Run the separately labelled steady-state Wasm group
 npm run benchmark:legacy       # Run best-effort historical JavaScript adapters
 npm run benchmark:comprehensive
-npm run benchmark:competition:setup -- --data
-npm run benchmark:competition -- --solver=both
+npm run benchmark:corpus:verify
+npm run compare-benchmarks -- baseline.json candidate.json
+npm run benchmark:competition:setup -- --data --skip-schoku
+npm run benchmark:competition  # Portable native set on the canonical corpus
 npm run profile                # Capture a V8 CPU profile
 npm run pack:check             # Inspect the npm package contents without publishing
 npm run check:package          # Smoke-test the ESM export, CLI, and npm packlist
@@ -70,15 +74,32 @@ PR benchmarks compare the branch with its merge base on the same Namespace runne
 Node.js and Bun runtimes. They run only the internal regression group so dependency or competitor
 behavior cannot hide a product regression.
 
-Competitive results are generated on a controlled Namespace runner during release preparation.
-Adapter setup, input conversion, prepared work, native/Wasm classification, dataset provenance, and
-supported solve modes must be explicit so comparisons remain reproducible and honest. JSON reports
-carry the runtime, hardware, commit, lockfile hash, timing configuration, dataset semantics, and
-solver versions needed to reproduce a run.
+Competitive JavaScript and separately labelled steady-state Wasm results are generated back-to-back
+on a controlled Namespace runner during release preparation. Direct rankings cover only ordinary independent-puzzle workloads with the same first-solution
+outcome and timing boundary. Prepared comparisons may exclude conversion to a library's natural
+input representation, but not puzzle-specific topology or search-state construction. Fixed-puzzle
+compilation is an unranked sudoku-dlx capability, and native/Wasm results remain separately labelled.
+See [PERFORMANCE.md](./PERFORMANCE.md) for the complete allowed-cache and timing contract.
+
+Every measurement sample processes a complete corpus pass, and throughput is computed from total
+puzzles divided by total elapsed time. Ranked passes deterministically relabel puzzle digits and use
+fresh prepared objects outside timing so exact-input caches and mutation cannot benefit from the
+harness loop. Adapter setup, input conversion, prepared work, runtime classification, dataset
+provenance, and supported solve modes must be explicit so comparisons remain reproducible and
+honest. JSON reports carry the runtime, hardware, commit, lockfile hash, timing configuration,
+dataset semantics, and solver versions needed to reproduce a run.
 
 Legacy packages and historical Node addons are optional and may be skipped with an explicit reason.
-Pinned Tdoku/Schoku source comparisons and external corpora are a separate opt-in workflow under
+Every in-process third-party solver is exact-pinned so the installed implementation cannot drift
+away from the version recorded by its adapter and benchmark report; update the dependency, adapter
+metadata, and lockfile together.
+
+Pinned native executable comparisons and external corpora are a separate opt-in workflow under
 `benchmark/competition/`; they are never vendored or mixed into the in-process JavaScript tables.
+That workflow ranks only the shared full-process boundary: one fresh, single-threaded process per
+complete canonical corpus pass, including startup, corpus input, solving, and solution-file output.
+Rates use total puzzles across all measured process runs divided by total elapsed time. Upstream
+internal timers with different boundaries are retained only as diagnostics.
 
 ## Dependency maintenance
 

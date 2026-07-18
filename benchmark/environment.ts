@@ -7,6 +7,7 @@ import type { BenchmarkEnvironment } from './types.js'
 
 export function collectEnvironment(projectRoot = process.cwd()): BenchmarkEnvironment {
   const bunVersion = process.versions.bun
+  const git = readGitState(projectRoot)
   return {
     runtime: bunVersion ? 'bun' : 'node',
     runtimeVersion: bunVersion ?? process.version,
@@ -16,18 +17,24 @@ export function collectEnvironment(projectRoot = process.cwd()): BenchmarkEnviro
     architecture: arch(),
     cpu: cpus()[0]?.model ?? 'unknown',
     logicalCpus: cpus().length,
-    gitSha: readGitSha(projectRoot),
+    ...(git ? { gitSha: git.sha, gitDirty: git.dirty } : {}),
     lockfileSha256: hashFile(resolve(projectRoot, 'package-lock.json'))
   }
 }
 
-function readGitSha(projectRoot: string): string | undefined {
+function readGitState(projectRoot: string): { sha: string; dirty: boolean } | undefined {
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], {
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
       cwd: projectRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore']
     }).trim()
+    const status = execFileSync('git', ['status', '--porcelain=v1'], {
+      cwd: projectRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+    return { sha, dirty: status.trim().length > 0 }
   } catch {
     return undefined
   }

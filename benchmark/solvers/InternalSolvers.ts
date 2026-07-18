@@ -75,7 +75,7 @@ export class InternalCellsSolver extends InternalAdapter<SudokuCell[]> {
 }
 
 export class InternalCompiledStringSolver extends InternalAdapter<CompiledSudoku> {
-  readonly metadata = metadata('internal-compiled-string', 'sudoku-dlx compileString + solve')
+  readonly metadata = metadata('internal-compiled-string', 'sudoku-dlx compiled-string solve')
   readonly semantics = ['prepared'] as const
 
   prepare(puzzle: string): CompiledSudoku {
@@ -88,7 +88,7 @@ export class InternalCompiledStringSolver extends InternalAdapter<CompiledSudoku
 }
 
 export class InternalCompiledCellsSolver extends InternalAdapter<CompiledSudoku> {
-  readonly metadata = metadata('internal-compiled-cells', 'sudoku-dlx compileCells + solve')
+  readonly metadata = metadata('internal-compiled-cells', 'sudoku-dlx compiled-cells solve')
   readonly semantics = ['prepared'] as const
 
   prepare(puzzle: string): CompiledSudoku {

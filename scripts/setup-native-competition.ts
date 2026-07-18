@@ -3,12 +3,13 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { arch, platform } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import {
+  AUTORESEARCH_SUDOKU,
   NATIVE_COMPETITION_PINS,
   SCHOKU,
   TDOKU,
@@ -16,6 +17,14 @@ import {
   type NativeSourcePin
 } from '../benchmark/competition/manifest.js'
 import { EASY_PUZZLE } from '../benchmark/datasets/smoke.js'
+import {
+  getNativeBuildSpecification,
+  materializeBuildStep,
+  writeNativeBuildReceipt,
+  type BuildPaths,
+  type NativeBuildSpecification
+} from './native-competition/build-receipt.js'
+import { validateSolutionFile } from './native-competition/corpus.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -23,7 +32,19 @@ interface SetupOptions {
   readonly cacheDirectory: string
   readonly fetchData: boolean
   readonly checkoutOnly: boolean
+  readonly skipAutoresearch: boolean
   readonly skipSchoku: boolean
+}
+
+interface VerifiedCheckout {
+  readonly directory: string
+  readonly origin: string
+}
+
+interface BuiltExternalSolver {
+  readonly sourcePin: NativeSourcePin
+  readonly sourceOrigin: string
+  readonly binaryPath: string
 }
 
 export async function setupNativeCompetition(options: SetupOptions): Promise<void> {
@@ -36,12 +57,19 @@ export async function setupNativeCompetition(options: SetupOptions): Promise<voi
   }
 
   const tdokuDirectory = resolve(options.cacheDirectory, 'tdoku')
-  await ensureCheckout(TDOKU, tdokuDirectory)
+  const tdokuCheckout = await ensureCheckout(TDOKU, tdokuDirectory)
 
-  let schokuDirectory: string | undefined
+  let autoresearchCheckout: VerifiedCheckout | undefined
+  if (!options.skipAutoresearch) {
+    autoresearchCheckout = await ensureCheckout(
+      AUTORESEARCH_SUDOKU,
+      resolve(options.cacheDirectory, 'autoresearch-sudoku')
+    )
+  }
+
+  let schokuCheckout: VerifiedCheckout | undefined
   if (!options.skipSchoku) {
-    schokuDirectory = resolve(options.cacheDirectory, 'schoku')
-    await ensureCheckout(SCHOKU, schokuDirectory)
+    schokuCheckout = await ensureCheckout(SCHOKU, resolve(options.cacheDirectory, 'schoku'))
   }
 
   if (options.fetchData) await fetchTdokuData(tdokuDirectory)
@@ -50,19 +78,75 @@ export async function setupNativeCompetition(options: SetupOptions): Promise<voi
     return
   }
 
-  await buildTdoku(tdokuDirectory)
-  await smokeTdoku(tdokuDirectory, options.cacheDirectory)
+  const projectRoot = resolveProjectRoot()
+  const binariesDirectory = resolve(options.cacheDirectory, 'bin')
+  await mkdir(binariesDirectory, { recursive: true })
 
-  if (schokuDirectory) {
+  const tdokuBinary = await buildTdoku(tdokuCheckout.directory, binariesDirectory, projectRoot)
+  const externalBuilds: BuiltExternalSolver[] = [
+    {
+      sourcePin: TDOKU,
+      sourceOrigin: tdokuCheckout.origin,
+      binaryPath: tdokuBinary
+    }
+  ]
+  const binaries: Array<{ id: string; command: string; args?: readonly string[] }> = [
+    {
+      id: 'sudoku-dlx',
+      command: process.execPath,
+      args: [
+        resolve(dirname(fileURLToPath(import.meta.url)), 'native-competition/sudoku-dlx-runner.js')
+      ]
+    },
+    { id: 'tdoku', command: tdokuBinary }
+  ]
+
+  if (autoresearchCheckout) {
+    const binary = await buildAutoresearch(
+      autoresearchCheckout.directory,
+      binariesDirectory,
+      projectRoot
+    )
+    binaries.push({ id: AUTORESEARCH_SUDOKU.id, command: binary })
+    externalBuilds.push({
+      sourcePin: AUTORESEARCH_SUDOKU,
+      sourceOrigin: autoresearchCheckout.origin,
+      binaryPath: binary
+    })
+  }
+
+  if (schokuCheckout) {
     assertSchokuPlatform()
-    await buildSchoku(schokuDirectory)
-    await smokeSchoku(schokuDirectory, options.cacheDirectory)
+    const binary = await buildSchoku(schokuCheckout.directory, binariesDirectory, projectRoot)
+    binaries.push({ id: SCHOKU.id, command: binary })
+    externalBuilds.push({
+      sourcePin: SCHOKU,
+      sourceOrigin: schokuCheckout.origin,
+      binaryPath: binary
+    })
+  }
+
+  await smokeBatchRunners(binaries, options.cacheDirectory)
+  for (const build of externalBuilds) {
+    const verified = await writeNativeBuildReceipt({
+      cacheDirectory: options.cacheDirectory,
+      projectRoot,
+      sourcePin: build.sourcePin,
+      sourceOrigin: build.sourceOrigin,
+      binaryPath: build.binaryPath
+    })
+    console.log(
+      `Recorded ${build.sourcePin.id} build receipt ${verified.sha256} at ${verified.path}`
+    )
   }
 
   console.log(`Native competition setup complete in ${options.cacheDirectory}`)
 }
 
-async function ensureCheckout(source: NativeSourcePin, directory: string): Promise<void> {
+async function ensureCheckout(
+  source: NativeSourcePin,
+  directory: string
+): Promise<VerifiedCheckout> {
   if (!existsSync(directory)) {
     await mkdir(dirname(directory), { recursive: true })
     await run('git', ['clone', '--filter=blob:none', '--no-checkout', source.repository, directory])
@@ -70,51 +154,124 @@ async function ensureCheckout(source: NativeSourcePin, directory: string): Promi
     throw new Error(`Refusing to reuse non-Git directory: ${directory}`)
   }
 
-  await run('git', ['fetch', '--depth=1', 'origin', source.commit], directory)
-  await run('git', ['checkout', '--detach', source.commit], directory)
+  const { stdout: origin } = await run('git', ['remote', 'get-url', 'origin'], directory)
+  if (normalizeRepository(origin.trim()) !== normalizeRepository(source.repository)) {
+    throw new Error(`${source.id} origin does not match its pinned repository: ${origin.trim()}`)
+  }
+
+  const safeGit = ['-c', 'core.hooksPath=/dev/null']
+  await run('git', [...safeGit, 'fetch', '--depth=1', 'origin', source.commit], directory)
+  await run('git', [...safeGit, 'checkout', '--detach', source.commit], directory)
   const { stdout } = await run('git', ['rev-parse', 'HEAD'], directory)
   if (stdout.trim() !== source.commit) {
     throw new Error(`${source.id} checkout verification failed: expected ${source.commit}`)
   }
+  const { stdout: changes } = await run(
+    'git',
+    [...safeGit, 'status', '--porcelain=v1', '--untracked-files=no'],
+    directory
+  )
+  if (changes.trim()) throw new Error(`${source.id} checkout contains modified tracked files`)
+  return { directory, origin: origin.trim() }
 }
 
-async function buildTdoku(directory: string): Promise<void> {
-  console.log('Building pinned Tdoku benchmark runner')
-  await run('./BUILD.sh', ['run_benchmark', '-DOPT=3'], directory)
+function normalizeRepository(repository: string): string {
+  return repository.replace(/\/$/, '').replace(/\.git$/, '')
 }
 
-async function buildSchoku(directory: string): Promise<void> {
-  console.log('Building pinned Schoku speed branch')
-  await run('make', [], resolve(directory, 'src'))
+async function buildTdoku(
+  directory: string,
+  binariesDirectory: string,
+  projectRoot: string
+): Promise<string> {
+  console.log('Building pinned Tdoku with the common batch adapter')
+  const specification = getNativeBuildSpecification(TDOKU.id)
+  const buildsDirectory = resolve(dirname(binariesDirectory), 'builds')
+  await mkdir(buildsDirectory, { recursive: true })
+  const buildDirectory = await mkdtemp(resolve(buildsDirectory, 'tdoku-'))
+  const binary = resolve(binariesDirectory, specification.binaryName)
+  await executeBuild(
+    specification,
+    buildPaths(specification, projectRoot, directory, buildDirectory, binary)
+  )
+  return binary
 }
 
-async function smokeTdoku(directory: string, cacheDirectory: string): Promise<void> {
-  const puzzleFile = resolve(cacheDirectory, 'smoke-puzzles.txt')
+async function buildAutoresearch(
+  directory: string,
+  binariesDirectory: string,
+  projectRoot: string
+): Promise<string> {
+  console.log('Building pinned autoresearch-sudoku with the common batch adapter')
+  const specification = getNativeBuildSpecification(AUTORESEARCH_SUDOKU.id)
+  const binary = resolve(binariesDirectory, specification.binaryName)
+  await executeBuild(
+    specification,
+    buildPaths(specification, projectRoot, directory, binariesDirectory, binary)
+  )
+  return binary
+}
+
+async function buildSchoku(
+  directory: string,
+  binariesDirectory: string,
+  projectRoot: string
+): Promise<string> {
+  console.log('Building pinned Schoku library with the common single-threaded batch adapter')
+  const specification = getNativeBuildSpecification(SCHOKU.id)
+  const buildsDirectory = resolve(dirname(binariesDirectory), 'builds')
+  await mkdir(buildsDirectory, { recursive: true })
+  const buildDirectory = await mkdtemp(resolve(buildsDirectory, 'schoku-'))
+  const binary = resolve(binariesDirectory, specification.binaryName)
+  await executeBuild(
+    specification,
+    buildPaths(specification, projectRoot, directory, buildDirectory, binary)
+  )
+  return binary
+}
+
+function buildPaths(
+  specification: NativeBuildSpecification,
+  projectRoot: string,
+  source: string,
+  build: string,
+  binary: string
+): BuildPaths {
+  return {
+    source,
+    build,
+    binary,
+    adapter: resolve(projectRoot, specification.adapterPath)
+  }
+}
+
+async function executeBuild(
+  specification: NativeBuildSpecification,
+  paths: BuildPaths
+): Promise<void> {
+  for (const declaredStep of specification.steps) {
+    const step = materializeBuildStep(declaredStep, paths)
+    await run(step.tool, step.arguments, undefined, step.environment)
+  }
+}
+
+async function smokeBatchRunners(
+  binaries: readonly { id: string; command: string; args?: readonly string[] }[],
+  cacheDirectory: string
+): Promise<void> {
+  const smokeDirectory = resolve(cacheDirectory, 'smoke')
+  await mkdir(smokeDirectory, { recursive: true })
+  const puzzleFile = resolve(smokeDirectory, 'puzzles.txt')
   await writeFile(puzzleFile, `${EASY_PUZZLE}\n`)
-  console.log('Smoke-checking Tdoku with validation enabled')
-  await run(resolve(directory, 'build/run_benchmark'), [
-    '-f',
-    '-e',
-    '1',
-    '-n',
-    '1',
-    '-r1',
-    '-t',
-    '1',
-    '-w',
-    '1',
-    '-v1',
-    '-s',
-    'tdoku',
-    puzzleFile
-  ])
-}
 
-async function smokeSchoku(directory: string, cacheDirectory: string): Promise<void> {
-  const puzzleFile = resolve(cacheDirectory, 'smoke-puzzles.txt')
-  const solutionFile = resolve(cacheDirectory, 'smoke-schoku-solutions.txt')
-  console.log('Smoke-checking single-threaded Schoku with validation enabled')
-  await run(resolve(directory, 'src/schoku'), ['-rO', '-t1', '-v', '-y', puzzleFile, solutionFile])
+  for (const binary of binaries) {
+    const solutionFile = resolve(smokeDirectory, `${binary.id}-solutions.txt`)
+    console.log(`Smoke-checking ${binary.id} through the common validated batch boundary`)
+    await run(binary.command, [...(binary.args ?? []), puzzleFile, solutionFile], undefined, {
+      OMP_NUM_THREADS: '1'
+    })
+    await validateSolutionFile(binary.id, solutionFile, [EASY_PUZZLE])
+  }
 }
 
 async function fetchTdokuData(tdokuDirectory: string): Promise<void> {
@@ -149,7 +306,7 @@ function sha256(contents: Uint8Array): string {
 function assertSchokuPlatform(): void {
   if (platform() !== 'linux' || arch() !== 'x64') {
     throw new Error(
-      'Schoku fc64877 requires Linux/x86-64 plus OpenMP, AVX2, BMI/BMI2, and LZCNT; rerun with --skip-schoku to set up Tdoku only'
+      'Schoku fc64877 requires Linux/x86-64 plus OpenMP, AVX2, BMI/BMI2, and LZCNT; rerun with --skip-schoku'
     )
   }
 }
@@ -165,11 +322,13 @@ function assertSafeCacheDirectory(directory: string): void {
 async function run(
   command: string,
   args: readonly string[],
-  cwd?: string
+  cwd?: string,
+  environment?: NodeJS.ProcessEnv
 ): Promise<{ stdout: string; stderr: string }> {
   try {
     const result = await execFileAsync(command, [...args], {
       cwd,
+      env: environment === undefined ? process.env : { ...process.env, ...environment },
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024
     })
@@ -209,6 +368,7 @@ function parseOptions(args = process.argv.slice(2)): SetupOptions & { help: bool
     cacheDirectory: resolve(projectRoot, cacheArgument ?? '.benchmark-cache/sudoku-native'),
     fetchData: args.includes('--data'),
     checkoutOnly: args.includes('--checkout-only'),
+    skipAutoresearch: args.includes('--skip-autoresearch'),
     skipSchoku: args.includes('--skip-schoku'),
     help: args.includes('--help') || args.includes('-h')
   }
@@ -219,7 +379,9 @@ function showUsage(): void {
 
   --data             Download, checksum, and extract the pinned Tdoku corpus
   --checkout-only    Verify source pins without building or smoke-testing
-  --skip-schoku      Set up only the BSD-licensed Tdoku checkout
+  --skip-autoresearch
+                     Skip the Rust challenger (requires rustc)
+  --skip-schoku      Skip the GPL Schoku checkout (required off Linux/x86-64)
   --cache=<path>     Cache location (default: .benchmark-cache/sudoku-native)
   --help             Show this help`)
 }

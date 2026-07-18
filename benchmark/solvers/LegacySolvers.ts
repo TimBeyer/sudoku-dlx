@@ -96,7 +96,10 @@ export class LegacyMattflowSolver extends OptionalCommonJsSolver<MattflowModule>
   )
 
   solveWith(module: MattflowModule, puzzle: string): unknown {
-    return module(puzzle.replaceAll('.', '0'), { hintCheck: false })
+    // Upstream keeps its iteration counter at module scope instead of resetting it
+    // per solve. Disabling that guard prevents one corpus pass from poisoning the
+    // next without changing the actual search performed for any puzzle.
+    return module(puzzle.replaceAll('.', '0'), { hintCheck: false, maxIterations: 0 })
   }
 }
 

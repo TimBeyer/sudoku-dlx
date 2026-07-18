@@ -1,68 +1,72 @@
 import type { BenchmarkGroup } from '../types.js'
 import {
+  internalCompiledSolvers,
   internalEndToEndSolvers,
   internalPreparedSolvers,
   legacySolvers,
+  maintainedPreparedSolvers,
   maintainedSolvers,
   nativeAddonSolvers,
-  nativePreparedSolvers
+  nativePreparedSolvers,
+  wasmSolvers
 } from './solvers.js'
 
 const modernEndToEnd = [...internalEndToEndSolvers, ...maintainedSolvers] as const
-const modernPrepared = [...internalPreparedSolvers, ...maintainedSolvers] as const
+const modernPrepared = [...internalPreparedSolvers, ...maintainedPreparedSolvers] as const
 
 export const groups = {
   internal: {
     name: 'internal',
-    description: 'Public and compiled sudoku-dlx regression benchmarks.',
+    description: 'Representative public API regressions plus unranked compiled replay.',
     matrix: {
-      'easy-end-to-end': internalEndToEndSolvers,
-      'hard-end-to-end': internalEndToEndSolvers,
-      'rotating-end-to-end': internalEndToEndSolvers,
-      'easy-prepared': internalPreparedSolvers,
-      'hard-prepared': internalPreparedSolvers,
-      'rotating-prepared': internalPreparedSolvers
+      'representative-end-to-end': internalEndToEndSolvers,
+      'representative-prepared': internalPreparedSolvers,
+      'representative-compiled-replay': internalCompiledSolvers
     }
   },
   competitive: {
     name: 'competitive',
-    description: 'sudoku-dlx against maintained JavaScript Sudoku solvers.',
+    description:
+      'Direct, solve-once comparisons against maintained JavaScript solvers plus an unranked sudoku-dlx capability section.',
     matrix: {
-      'easy-end-to-end': modernEndToEnd,
-      'hard-end-to-end': modernEndToEnd,
-      'rotating-end-to-end': modernEndToEnd,
-      'easy-prepared': modernPrepared,
-      'hard-prepared': modernPrepared,
-      'rotating-prepared': modernPrepared
+      'representative-end-to-end': modernEndToEnd,
+      'representative-prepared': modernPrepared,
+      'representative-compiled-replay': internalCompiledSolvers
+    }
+  },
+  wasm: {
+    name: 'wasm',
+    description:
+      'Direct steady-state comparison with WebAssembly solvers after one-time module initialization.',
+    matrix: {
+      'representative-end-to-end': ['internal-string', ...wasmSolvers]
     }
   },
   legacy: {
     name: 'legacy',
-    description: 'Best-effort comparison with optional historical pure-JavaScript packages.',
+    description: 'Unranked best-effort observations for optional historical JavaScript packages.',
     matrix: {
       'easy-end-to-end': ['internal-string', ...legacySolvers]
     }
   },
   comprehensive: {
     name: 'comprehensive',
-    description: 'All maintained paths plus compatible legacy solvers.',
+    description:
+      'Maintained direct comparisons, unranked compiled replay, and separate historical diagnostics.',
     matrix: {
-      'easy-end-to-end': [...modernEndToEnd, ...legacySolvers],
-      'hard-end-to-end': modernEndToEnd,
-      'rotating-end-to-end': modernEndToEnd,
-      'easy-prepared': modernPrepared,
-      'hard-prepared': modernPrepared,
-      'rotating-prepared': modernPrepared
+      'representative-end-to-end': modernEndToEnd,
+      'representative-prepared': modernPrepared,
+      'representative-compiled-replay': internalCompiledSolvers,
+      'easy-end-to-end': ['internal-string', ...legacySolvers]
     }
   },
   native: {
     name: 'native',
-    description: 'Optional historical Node native addons installed under benchmark/native.',
+    description: 'Direct in-process comparison with optional historical Node native addons.',
     matrix: {
-      'easy-end-to-end': ['internal-string', ...nativeAddonSolvers],
-      'hard-end-to-end': ['internal-string', ...nativeAddonSolvers],
-      'rotating-end-to-end': ['internal-string', ...nativeAddonSolvers],
-      'rotating-prepared': ['internal-compiled-string', ...nativePreparedSolvers]
+      'representative-end-to-end': ['internal-string', ...nativeAddonSolvers],
+      'representative-prepared': ['internal-cells', ...nativePreparedSolvers],
+      'representative-compiled-replay': internalCompiledSolvers
     }
   }
 } as const satisfies Record<string, BenchmarkGroup>
