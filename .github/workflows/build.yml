@@ -28,3 +28,6 @@ jobs:
 
       - name: Build and smoke-test package
         run: npm run check:package
+
+      - name: Verify representative benchmark corpus
+        run: npm run benchmark:corpus:verify

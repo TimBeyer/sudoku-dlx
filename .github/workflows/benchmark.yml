@@ -121,7 +121,7 @@ jobs:
               > "comparison-${{ matrix.runtime }}.md"
           else
             {
-              echo "No schema-v1 benchmark is available at the merge base."
+              echo "No compatible benchmark report is available at the merge base."
               echo
               echo "The pull-request report is attached as an artifact and will become the baseline after merge."
             } > "comparison-${{ matrix.runtime }}.md"

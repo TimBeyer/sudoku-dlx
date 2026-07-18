@@ -91,7 +91,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Update competitive benchmark documentation
+      - name: Update benchmark documentation
         run: npm run update-benchmark-docs -- --quiet
 
       - name: Upload benchmark documentation

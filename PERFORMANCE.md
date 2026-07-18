@@ -12,23 +12,59 @@ Use `npm run benchmark` for regression work. Record the runtime, architecture, b
 lockfile, and before-and-after results. Compare runs on the same machine and avoid drawing
 conclusions from small changes on variable shared hardware.
 
-The benchmark suite separates:
+The benchmark suite has four explicit reporting lanes:
 
-- public string input, including parsing and solver setup;
-- public cell input, including validation and solver setup;
-- compiled fixed-puzzle solving with compilation outside the timed operation;
-- maintained JavaScript competitors;
-- best-effort legacy JavaScript packages and historical Node native addons;
-- separately executed, pinned native batch solvers and external corpora.
+1. **End-to-end npm packages:** an ordinary independent string-form puzzle enters each library's
+   normal solve-once path and one solution is returned. JavaScript and Wasm implementations share
+   this lane because their public workload is identical. Parsing, per-call marshalling, and
+   puzzle-specific setup are timed.
+2. **Prepared npm packages:** callers already hold each library's natural parsed representation.
+   Only representation conversion is excluded; puzzle-specific solver topology and search-state
+   construction remain timed.
+3. **Sudoku-dlx performance modes:** fixed-puzzle compilation is reported as an unranked capability.
+   It is never used to claim a win over a library without an equivalent exact-puzzle concept.
+4. **Legacy diagnostics:** packages whose public APIs enumerate all solutions or otherwise differ
+   from the normal first-solution contract stay unranked.
 
-Preparation outside a timed region is identified as `prepared`; public `end-to-end` cases include
-input conversion. Every adapter must return a valid solution before it is measured. Solvers that
-mutate inputs receive equivalent fresh input on every iteration, and corpus cases rotate puzzles in
-deterministic order.
+Direct comparison is based on the real-world outcome and timing boundary, not identical source-code
+shape. A solver may use any algorithm, general-purpose precomputation, reusable process state, or
+code restructuring that applies to arbitrary incoming puzzles. The following are allowed outside a
+directly compared timed region:
+
+- module loading and ordinary runtime initialization;
+- immutable, puzzle-independent tables such as the 729 standard Sudoku candidate rows;
+- conversion to a library's natural input representation in the prepared tier;
+- one-time module and Wasm initialization that applies to arbitrary future puzzles.
+
+The following are not allowed in a direct comparison:
+
+- compiling topology for the exact givens before timing;
+- memoizing an exact puzzle's result or recognizing the benchmark corpus;
+- reusing a mutated or already-solved input;
+- comparing first-solution work with uniqueness checks or all-solution enumeration;
+- comparing per-puzzle rates computed from different mixtures of easy and hard inputs.
+
+Each timed sample solves one complete corpus pass. Throughput is total puzzles solved divided by
+total elapsed time, so every solver receives the same difficulty mix. Ranked passes use a new,
+deterministic digit-isomorphic form of every puzzle and prepared cases receive fresh parsed objects;
+the relabelling and permitted representation conversion happen in the harness outside the timed
+region. This prevents an exact-result cache or mutated input from benefiting when Tinybench repeats
+the workload. Warmup uses a disjoint corpus, and measurement outputs are validated after timing
+against the exact transformed givens, rows, columns, and boxes. Direct tables use first-solution
+semantics throughout.
+
+The ranked in-process corpus contains 64 independently generated, unique-solution puzzles with
+25–40 givens and a spread across four corpus-relative search-cost bands. It does not inflate its
+size with transformations of a few fixtures. Eight separately generated puzzles form the warmup
+corpus. Both base sets are deterministic, disjoint, and checked by
+`npm run benchmark:corpus:verify`; per-pass digit relabelling is only an anti-cache schedule and is
+not counted as additional corpus diversity.
 
 Schema-versioned JSON captures the runtime and version, Node version, CPU, architecture, operating
 system, repository commit, lockfile SHA-256, timing configuration, dataset, semantics, and solver
-metadata. Keep that metadata with any quoted result.
+metadata. Keep that metadata with any quoted result. Revision comparisons report a direction only
+when the two reported confidence intervals do not overlap; overlapping intervals remain neutral
+even when the point estimates cross a fixed percentage threshold.
 
 ## Hot-path guidelines
 
@@ -39,14 +75,18 @@ metadata. Keep that metadata with any quoted result.
   cases.
 - Use a solver template only for repeated solves of identical givens. Compiling clones row topology
   so `SolverTemplate` cannot mutate the shared candidate cache.
+- Keep compiled replay results in the unranked performance-mode tier. If compilation is evaluated
+  for a normal one-shot workload, include compilation in the timed operation.
 - Run unit tests and adapter correctness validation before trusting throughput results.
 
 ## Reproducible comparisons
 
 ```sh
+npm run benchmark:corpus:verify
 npm run benchmark
 npm run benchmark:json -- baseline.json
 npm run compare-benchmarks -- baseline.json candidate.json
+npm run benchmark:competitive
 ```
 
 Development builds place the benchmark harness under `built/dev/`; production package output
@@ -54,6 +94,8 @@ remains isolated under `built/lib/` and `built/typings/`.
 
 Release benchmark tables are generated on the same Namespace runner profile used by the sibling
 [`dancing-links`](https://github.com/TimBeyer/dancing-links) project. GitHub-hosted CPU measurements
-are useful as diagnostics but are not published as competitive results. Native batch solvers and
-third-party corpora remain opt-in and are reported separately because their timing boundaries and
-licenses differ from the in-process JavaScript suite.
+are useful as diagnostics but are not published as competitive results. Every competitor is an
+exact-pinned npm development dependency installed by the normal `npm ci`; the suite does not clone
+or compile standalone third-party solver repositories. Implementation language is report metadata,
+not a separate fairness tier: one-time module initialization is outside timing for every package,
+while each public solve call and its marshalling remain timed.

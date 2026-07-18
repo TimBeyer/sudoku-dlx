@@ -132,129 +132,110 @@ See [DEVELOPMENT.md](./DEVELOPMENT.md) for the full workflow and
 
 ## Benchmarking
 
-The benchmark harness validates every adapter before timing it and reports puzzles per second. It
-distinguishes end-to-end calls, where public input conversion and solver setup are timed, from
-prepared calls, where conversion or compilation happens outside the measured operation. Rotating
-corpora use deterministic order so solvers cannot benefit from repeatedly receiving only one
-puzzle.
+The benchmark harness reports honest corpus throughput: every timed sample solves one complete pass
+over the same 64 independently generated puzzle structures, and puzzles per second is calculated
+from total work divided by total elapsed time. Each ranked pass uses fresh exact strings and fresh
+prepared objects outside timing, so an exact-result cache or input mutation cannot benefit from the
+harness loop. Warmup puzzles are disjoint from measured puzzles, and measured solutions are
+validated after timing.
+
+Direct rankings distinguish end-to-end calls, where public input conversion and puzzle-specific
+setup are timed, from prepared calls, where only conversion to each library's natural input shape is
+excluded. Sudoku-dlx's exact-puzzle compilation mode is shown separately as an unranked capability;
+it is useful when identical givens are solved repeatedly, but it is not contrasted with ordinary
+one-shot solver APIs.
 
 ```sh
 npm run benchmark                 # sudoku-dlx regression paths
-npm run benchmark:competitive     # maintained JavaScript solvers
-npm run benchmark:comprehensive   # maintained plus compatible legacy solvers
+npm run benchmark:competitive     # maintained npm solvers
+npm run benchmark:comprehensive   # ranked maintained, capability, and legacy sections
+npm run benchmark:corpus:verify   # reproduce and verify both checked-in corpora
 npm run benchmark:json -- run.json
 ```
 
-Historical pure-JavaScript packages are a best-effort `legacy` group. Historical Node native
-addons are isolated from the main dependency graph and must be installed explicitly:
+Historical pure-JavaScript packages are a best-effort `legacy` group:
 
 ```sh
 npm run benchmark:legacy
-npm run benchmark:native:install
-npm run benchmark:native
 ```
 
-Tdoku and Schoku use a separate, opt-in batch-throughput workflow with pinned upstream revisions;
-no third-party native source, binaries, or corpora are distributed in this package. See
-[benchmark/competition/README.md](./benchmark/competition/README.md) and
-[benchmark/native/README.md](./benchmark/native/README.md).
-
-```sh
-npm run benchmark:competition:setup -- --data
-npm run benchmark:competition -- --solver=both
-```
+Every competitor is an exact-pinned npm development dependency installed by the normal `npm ci`.
+Packages compete through the same public solve-once contract whether their implementation is
+JavaScript or WebAssembly. The benchmark suite does not clone third-party repositories or maintain
+C, C++, or Rust runner programs.
 
 For comparisons that mean anything, use the same machine, runtime, lockfile, warmup, measurement
 duration, and dataset. Schema-versioned JSON includes runtime, CPU, platform, commit, lockfile hash,
 timing configuration, dataset semantics, and solver versions. `npm run compare-benchmarks` compares
-two such reports. Published competitive tables run on the same controlled runner profile; ordinary
-GitHub-hosted CPU measurements are not presented as release performance.
+two such reports and keeps the assessment neutral when their reported confidence intervals overlap.
+The published competitive table runs on a controlled runner profile; ordinary GitHub-hosted CPU
+measurements are not presented as release performance.
 
 ## Benchmarks
 
-Benchmarks solve one puzzle per operation, rotate deterministic corpora, and validate every solver result before timing. End-to-end cases include public input conversion; prepared cases move conversion or fixed-puzzle compilation outside the timed operation.
+Ranked tables compare the same ordinary first-solution workload regardless of whether an npm package is implemented in JavaScript or WebAssembly. Module loading and one-time runtime initialization happen before timing; per-call marshalling, public input conversion, puzzle-specific setup, and solving remain timed. Each timed sample processes one complete corpus pass, and throughput is total puzzles divided by total elapsed time. Prepared cases exclude only conversion to each library's natural input representation. Ranked passes receive fresh deterministic digit-isomorphic strings and fresh prepared objects outside timing, preventing exact-result caches or input mutation from benefiting from harness repetition. Warmup uses a disjoint corpus, and measured outputs are validated after timing.
 
-### Easy puzzle — end-to-end public API
+### Representative corpus — string to first solution
 
-Dataset: `easy` (1 puzzle); semantics: `end-to-end`.
+Dataset: `representative-64` (64 puzzles per pass); warmup: `representative-warmup-8` (8 puzzles); tier: `end-to-end`; input schedule: `fresh-deterministic-digit-isomorph-v1-per-pass`.
 
-| Solver                 | Puzzles/sec |          Relative | Margin |
-| ---------------------- | ----------: | ----------------: | -----: |
-| sudoku-dlx solveString |   45,503.76 | **1.00× fastest** | ±0.16% |
-| sudoku-dlx solveCells  |    44,234.8 |             0.97× | ±0.12% |
-| @algorithm.ts/sudoku   |   20,969.94 |             0.46× | ±0.09% |
-| fast-sudoku-solver     |   11,075.34 |             0.24× | ±0.21% |
+Direct comparison: every solver receives the same independent puzzles and performs the same first-solution work.
 
-### Hard puzzle — end-to-end public API
+| Solver                     | Puzzles/sec |          Relative |  Margin |
+| -------------------------- | ----------: | ----------------: | ------: |
+| sudoku-dlx solveString     |   65,680.69 | **1.00× fastest** |  ±0.19% |
+| sudoku-dlx solveCells      |    63,841.4 |             0.97× |  ±0.22% |
+| SudokuBlitz                |   60,953.29 |             0.93× |  ±0.31% |
+| @reetesh/sudoku-engine     |   29,635.17 |             0.45× |  ±0.42% |
+| @algorithm.ts/sudoku       |   15,856.21 |             0.24× |  ±0.11% |
+| fast-sudoku-solver         |    8,108.48 |             0.12× |  ±1.42% |
+| openzeloku                 |    3,541.36 |             0.05× |  ±1.96% |
+| sudoku-pro                 |    2,726.37 |             0.04× |  ±4.84% |
+| @pyroth/sodo (WebAssembly) |    1,372.96 |             0.02× |  ±1.23% |
+| @hackettyam/sudoku-tools   |       98.35 |            <0.01× | ±12.38% |
 
-Dataset: `hard` (1 puzzle); semantics: `end-to-end`.
+### Representative corpus — parsed input to first solution
 
-| Solver                 | Puzzles/sec |          Relative | Margin |
-| ---------------------- | ----------: | ----------------: | -----: |
-| sudoku-dlx solveString |   37,999.85 | **1.00× fastest** | ±0.11% |
-| sudoku-dlx solveCells  |   36,903.51 |             0.97× | ±0.12% |
-| @algorithm.ts/sudoku   |   20,568.42 |             0.54× | ±0.07% |
-| fast-sudoku-solver     |        10.8 |             0.00× | ±0.59% |
+Dataset: `representative-64` (64 puzzles per pass); warmup: `representative-warmup-8` (8 puzzles); tier: `prepared-input`; input schedule: `fresh-deterministic-digit-isomorph-v1-per-pass`.
 
-### Easy + hard rotating corpus — end-to-end public API
+Direct comparison: every solver receives the same independent puzzles and performs the same first-solution work.
 
-Dataset: `rotating` (8 puzzles); semantics: `end-to-end`.
+| Solver                   | Puzzles/sec |          Relative |  Margin |
+| ------------------------ | ----------: | ----------------: | ------: |
+| sudoku-dlx solveCells    |   60,603.25 | **1.00× fastest** |  ±0.13% |
+| @reetesh/sudoku-engine   |   33,988.25 |             0.56× |  ±0.40% |
+| @algorithm.ts/sudoku     |    16,231.5 |             0.27× |  ±0.10% |
+| fast-sudoku-solver       |    7,198.92 |             0.12× |  ±1.33% |
+| openzeloku               |    3,587.63 |             0.06× |  ±1.97% |
+| sudoku-pro               |    2,736.56 |             0.05× |  ±4.89% |
+| @hackettyam/sudoku-tools |       98.73 |            <0.01× | ±12.21% |
 
-| Solver                 | Puzzles/sec |          Relative |  Margin |
-| ---------------------- | ----------: | ----------------: | ------: |
-| sudoku-dlx solveString |   39,075.62 | **1.00× fastest** |  ±0.16% |
-| sudoku-dlx solveCells  |   37,696.18 |             0.96× |  ±0.18% |
-| @algorithm.ts/sudoku   |   20,941.59 |             0.54× |  ±0.09% |
-| fast-sudoku-solver     |    4,460.66 |             0.11× | ±25.06% |
+### Compiled fixed-puzzle replay — sudoku-dlx capability
 
-### Easy fixed puzzle — prepared input
+Dataset: `representative-64` (64 puzzles per pass); warmup: `representative-warmup-8` (8 puzzles); tier: `compiled-replay`; input schedule: `fixed-corpus-replay`.
 
-Dataset: `easy` (1 puzzle); semantics: `prepared`.
+Capability only: exact-puzzle compilation happened before timing. These absolute rates describe repeated solving of already-compiled givens and are intentionally not contrasted with ordinary one-shot solver APIs.
 
-| Solver                           | Puzzles/sec |          Relative | Margin |
-| -------------------------------- | ----------: | ----------------: | -----: |
-| sudoku-dlx compileString + solve |   96,457.58 | **1.00× fastest** | ±0.09% |
-| sudoku-dlx compileCells + solve  |    96,205.3 |             1.00× | ±0.09% |
-| sudoku-dlx solveCells            |   43,314.55 |             0.45× | ±0.11% |
-| @algorithm.ts/sudoku             |   21,557.38 |             0.22× | ±0.08% |
-| fast-sudoku-solver               |   10,766.83 |             0.11× | ±0.14% |
-
-### Hard fixed puzzle — prepared input
-
-Dataset: `hard` (1 puzzle); semantics: `prepared`.
-
-| Solver                           | Puzzles/sec |          Relative | Margin |
-| -------------------------------- | ----------: | ----------------: | -----: |
-| sudoku-dlx compileCells + solve  |   81,626.02 | **1.00× fastest** | ±0.10% |
-| sudoku-dlx compileString + solve |    80,070.9 |             0.98× | ±0.11% |
-| sudoku-dlx solveCells            |   36,814.77 |             0.45× | ±0.11% |
-| @algorithm.ts/sudoku             |   20,990.99 |             0.26× | ±0.06% |
-| fast-sudoku-solver               |          11 |             0.00× | ±0.65% |
-
-### Easy + hard rotating corpus — prepared input
-
-Dataset: `rotating` (8 puzzles); semantics: `prepared`.
-
-| Solver                           | Puzzles/sec |          Relative |  Margin |
-| -------------------------------- | ----------: | ----------------: | ------: |
-| sudoku-dlx compileString + solve |   81,091.29 | **1.00× fastest** |  ±0.14% |
-| sudoku-dlx compileCells + solve  |   80,491.03 |             0.99× |  ±0.15% |
-| sudoku-dlx solveCells            |   37,673.15 |             0.46× |  ±0.17% |
-| @algorithm.ts/sudoku             |   21,211.75 |             0.26× |  ±0.11% |
-| fast-sudoku-solver               |    5,051.19 |             0.06× | ±25.39% |
+| Mode                             | Puzzles/sec | Margin |
+| -------------------------------- | ----------: | -----: |
+| sudoku-dlx compiled-string solve |  112,995.04 | ±0.61% |
+| sudoku-dlx compiled-cells solve  |   113,906.7 | ±0.13% |
 
 ### Reproduction metadata
 
-- Runtime: node v24.18.0 (Node 24.18.0)
-- CPU: AMD EPYC; 4 logical CPUs
-- Platform: linux 7.1.3, x64
-- Repository commit: `f5c84478b18b66f4bdb6eab762a4136bb9a7c889`
-- Lockfile SHA-256: `1d7359304abc544cdbe626a8c08f0fe314890f7b0ef7159d8b93077ca38ecccf`
-- Timing: 100 ms warmup and 500 ms measurement per task
-- Solvers: sudoku-dlx solveString workspace (MIT); sudoku-dlx solveCells workspace (MIT); fast-sudoku-solver 3.0.3 (MIT); @algorithm.ts/sudoku 4.0.4 (MIT); sudoku-dlx compileString + solve workspace (MIT); sudoku-dlx compileCells + solve workspace (MIT)
-- Generated: 2026-07-18T16:29:38.020Z
+- Runtime: node v25.7.0 (Node 25.7.0)
+- CPU: Apple M4; 10 logical CPUs
+- Platform: darwin 25.3.0, arm64
+- Repository state: `db2b03ffd1a05dbe91a8185c88c634e85e91d90e` with uncommitted benchmark changes
+- Lockfile SHA-256: `5e57fe42385e96d7e35f974be3c13e76d885adbe753036df997030e1331978c5`
+- Tinybench minima: 250 ms warmup and 2000 ms measurement per task; iteration minima may run longer
+- Measurement: complete-corpus-pass; rate: total-puzzles-per-total-elapsed-time
+- Ranked input schedule: fresh-deterministic-digit-isomorph-v1-per-pass
+- Validation: warmup-before-and-last-timed-pass-after
+- Solvers: sudoku-dlx solveString workspace (MIT, javascript); sudoku-dlx solveCells workspace (MIT, javascript); fast-sudoku-solver 3.0.3 (MIT, javascript); @algorithm.ts/sudoku 4.0.4 (MIT, javascript); SudokuBlitz 1.0.0 (MIT, javascript); @reetesh/sudoku-engine 2.1.0 (MIT, javascript); openzeloku 0.1.0 (MIT, javascript); sudoku-pro 1.0.15 (MIT, javascript); @hackettyam/sudoku-tools 1.1.0 (MIT, javascript); @pyroth/sodo (WebAssembly) 0.2.1 (MIT, wasm); sudoku-dlx compiled-string solve workspace (MIT, javascript); sudoku-dlx compiled-cells solve workspace (MIT, javascript)
+- Generated: 2026-07-18T20:42:20.283Z
 
-Large native and third-party corpora are opt-in and are not mixed into these in-process JavaScript tables.
+Compiled replay is an unranked sudoku-dlx capability for repeatedly solving identical givens. Legacy all-solution APIs remain in their own best-effort group.
 
 ## License
 
